@@ -1,106 +1,126 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Thermometer, Zap, Users, Activity, ShieldCheck, Wifi, MapPin, ChevronLeft, ChevronRight, Building2, Search, X } from 'lucide-react';
+import { Thermometer, Zap, Users, Activity, ShieldCheck, Wifi, MapPin, ChevronLeft, ChevronRight, Building2, Search, X, IndianRupee, DoorOpen, Map, Image, Utensils, Fan, Lightbulb, Lock, Unlock } from 'lucide-react';
+
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useProperties } from '@/hooks/useCrmData';
 import { Input } from '@/components/ui/input';
 
-// ─── Per-PG seed for deterministic-ish base values ──────────────────────────
-function pgSeed(name: string) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (Math.imul(31, h) + name.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
+const API_URL = "http://localhost:5000/api/pg-with-iot";
 
-function makeSnapshot(name: string) {
-  const s = pgSeed(name);
-  return {
-    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    temp: parseFloat((21 + (s % 5) + Math.random() * 2).toFixed(1)),
-    elec: parseFloat((0.6 + (s % 8) * 0.1 + Math.random() * 0.8).toFixed(1)),
-    occ: Math.floor(4 + (s % 10) + Math.random() * 6),
-  };
-}
-
-function makeHistory(name: string, len = 20) {
-  return Array.from({ length: len }, (_, i) => ({
-    ...makeSnapshot(name),
-    time: new Date(Date.now() - (len - i) * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-  }));
-}
-
-// ─── Fallback PG list if DB is empty / loading ───────────────────────────────
-const FALLBACK_PGS = [
-  { id: 'f1', name: 'Zion PG — Sector 62', area: 'Noida' },
-  { id: 'f2', name: 'Sunrise Residency', area: 'Koramangala' },
-  { id: 'f3', name: 'The Hub — Whitefield', area: 'Whitefield' },
-  { id: 'f4', name: 'Green Nest PG', area: 'HSR Layout' },
-  { id: 'f5', name: 'Elite Stay PG', area: 'Indiranagar' },
-];
-
-// ─── Main Component ───────────────────────────────────────────────────────────
 const IoTDashboard = () => {
-  const { data: dbProperties, isLoading } = useProperties();
-
-  const pgs = useMemo(() => {
-    const list = (dbProperties as any[]) || [];
-    return list.length > 0 ? list : FALLBACK_PGS;
-  }, [dbProperties]);
-
-  const [selectedId, setSelectedId] = useState<string>('');
+  const [pgs, setPgs] = useState<any[]>([]);
+  const [dbHealth, setDbHealth] = useState({ supabase: false, mongodb: false });
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedPgId, setSelectedPgId] = useState<string>('');
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [telemetry, setTelemetry] = useState<Record<string, any[]>>({});
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const fetchLiveIoTData = async () => {
+    try {
+      const response = await fetch(API_URL);
+      if (!response.ok) throw new Error("Failed to fetch IoT data");
+      const { data, dbStatus } = await response.json();
+      
+      setPgs(data);
+      setDbHealth(dbStatus);
+      setIsLoading(false);
+
+      // Update telemetry history for charts (keyed by roomId now)
+      setTelemetry(prev => {
+        const next = { ...prev };
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        
+        data.forEach((pg: any) => {
+          if (pg.rooms) {
+            pg.rooms.forEach((room: any) => {
+              if (room.sensor) {
+                // Parse Supabase status string into Capitalized
+                const capStatus = room.status ? room.status.charAt(0).toUpperCase() + room.status.slice(1) : 'Unknown';
+                
+                const snap = {
+                  time: timeStr,
+                  temp: room.sensor.temperature,
+                  elec: room.sensor.electricity,
+                  occ: capStatus === 'Occupied' ? 10 : 0,
+                  status: capStatus
+                };
+                const history = next[room._id] || [];
+                next[room._id] = [...history.slice(-19), snap]; // Keep last 20 records
+              }
+            });
+          }
+        });
+        return next;
+      });
+    } catch (err) {
+      console.error("Error fetching IoT data:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveIoTData();
+    intervalRef.current = setInterval(fetchLiveIoTData, 5000); // Poll every 5s
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-select first PG and room on initial load
+  useEffect(() => {
+    if (pgs.length > 0 && !selectedPgId) {
+      setSelectedPgId(pgs[0]._id);
+      if (pgs[0].rooms && pgs[0].rooms.length > 0) {
+        setSelectedRoomId(pgs[0].rooms[0]._id);
+      }
+    }
+  }, [pgs, selectedPgId]);
 
   const filteredPgs = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return pgs;
     return pgs.filter((p: any) =>
       p.name?.toLowerCase().includes(q) ||
-      p.area?.toLowerCase().includes(q) ||
-      p.city?.toLowerCase().includes(q)
+      p.location?.toLowerCase().includes(q)
     );
   }, [pgs, searchQuery]);
 
-  // Auto-select first PG once list is ready
-  useEffect(() => {
-    if (pgs.length > 0 && !selectedId) {
-      setSelectedId(pgs[0].id);
+  const selectedPg  = pgs.find(p => p._id === selectedPgId);
+  const selectedRoom = selectedPg?.rooms?.find((r: any) => r._id === selectedRoomId) || selectedPg?.rooms?.[0];
+  const chartData   = telemetry[selectedRoom?._id] || [];
+  const current     = chartData.length > 0 ? chartData[chartData.length - 1] : { temp: 0, elec: 0, status: 'Unknown' };
+
+  // When changing PG, auto-select its first room
+  const handlePgSelect = (pgId: string) => {
+    setSelectedPgId(pgId);
+    const pg = pgs.find(p => p._id === pgId);
+    if (pg?.rooms?.length > 0) {
+      setSelectedRoomId(pg.rooms[0]._id);
+    } else {
+      setSelectedRoomId('');
     }
-  }, [pgs]);
+  };
 
-  // Initialize telemetry history for all PGs
-  useEffect(() => {
-    if (pgs.length === 0) return;
-    const init: Record<string, any[]> = {};
-    pgs.forEach(p => { init[p.id] = makeHistory(p.name); });
-    setTelemetry(init);
-  }, [pgs.map(p => p.id).join(',')]);
+  const [roomStates, setRoomStates] = useState<Record<string, any>>({});
 
-  // Live-tick every 5 s — appends one point per PG
-  useEffect(() => {
-    if (pgs.length === 0) return;
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => {
-      setTelemetry(prev => {
-        const next = { ...prev };
-        pgs.forEach(p => {
-          const snap = makeSnapshot(p.name);
-          next[p.id] = [...(prev[p.id] || []).slice(1), snap];
-        });
-        return next;
+  const toggleDevice = async (roomId: string, device: string, currentState: boolean) => {
+    try {
+      const response = await fetch("http://localhost:5000/api/room-control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId, device, state: !currentState })
       });
-    }, 5000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [pgs.map(p => p.id).join(',')]);
-
-  const selectedPg  = pgs.find(p => p.id === selectedId);
-  const chartData   = telemetry[selectedId] || [];
-  const current     = chartData.length > 0 ? chartData[chartData.length - 1] : { temp: 0, elec: 0, occ: 0 };
+      if (response.ok) {
+        const { state } = await response.json();
+        setRoomStates(prev => ({ ...prev, [roomId]: state }));
+      }
+    } catch (err) {
+      console.error("Control error:", err);
+    }
+  };
 
   const scroll = (dir: 'left' | 'right') => {
     if (!scrollRef.current) return;
@@ -113,32 +133,35 @@ const IoTDashboard = () => {
 
         {/* ── PG Selector ─────────────────────────────────────────── */}
         <div className="bg-white/[0.02] p-5 rounded-2xl border border-white/5 backdrop-blur-md shadow-2xl">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
             <p className="text-[10px] uppercase tracking-[0.2em] text-primary/60 font-bold flex items-center gap-2">
               <Building2 className="h-3.5 w-3.5" /> Select PG to Monitor
               <span className="ml-1 text-muted-foreground font-normal normal-case tracking-normal">
                 ({filteredPgs.length} of {pgs.length})
               </span>
             </p>
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-success/5 rounded-full border border-success/20">
-                <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse shadow-[0_0_8px_hsl(var(--success))]" />
-                <span className="text-[9px] font-bold text-success uppercase tracking-widest">Live Feed</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className={`flex items-center gap-2 px-3 py-1.5 ${dbHealth.supabase ? 'bg-success/5 border-success/20' : 'bg-destructive/5 border-destructive/20'} rounded-full border`}>
+                <div className={`h-1.5 w-1.5 rounded-full ${dbHealth.supabase ? 'bg-success shadow-[0_0_8px_hsl(var(--success))]' : 'bg-destructive shadow-[0_0_8px_hsl(var(--destructive))]'}`} />
+                <span className={`text-[9px] font-bold uppercase tracking-widest ${dbHealth.supabase ? 'text-success' : 'text-destructive'}`}>
+                  Supabase: {dbHealth.supabase ? 'Connected' : 'Offline'}
+                </span>
               </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 rounded-full border border-primary/20">
-                <Wifi className="h-3 w-3 text-primary" />
-                <span className="text-[9px] font-bold text-primary uppercase tracking-widest">{pgs.length} Nodes</span>
+              <div className={`flex items-center gap-2 px-3 py-1.5 ${dbHealth.mongodb ? 'bg-success/5 border-success/20' : 'bg-warning/5 border-warning/20'} rounded-full border`}>
+                <div className={`h-1.5 w-1.5 rounded-full animate-pulse ${dbHealth.mongodb ? 'bg-success shadow-[0_0_8px_hsl(var(--success))]' : 'bg-warning shadow-[0_0_8px_hsl(var(--warning))]'}`} />
+                <span className={`text-[9px] font-bold uppercase tracking-widest ${dbHealth.mongodb ? 'text-success' : 'text-warning'}`}>
+                  MongoDB: {dbHealth.mongodb ? 'Telemetry Live' : 'Mocking Data'}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Search bar */}
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search PG by name, area or city…"
+              placeholder="Search PG by name or location…"
               className="pl-9 pr-9 h-9 text-xs bg-white/[0.03] border-white/10 focus:border-primary/40 rounded-xl"
             />
             {searchQuery && (
@@ -151,7 +174,6 @@ const IoTDashboard = () => {
             )}
           </div>
 
-          {/* Scrollable pill selector */}
           <div className="relative flex items-center gap-2">
             <button
               onClick={() => scroll('left')}
@@ -176,19 +198,19 @@ const IoTDashboard = () => {
                   )
                 : filteredPgs.map((pg: any) => (
                     <button
-                      key={pg.id}
-                      onClick={() => setSelectedId(pg.id)}
+                      key={pg._id}
+                      onClick={() => handlePgSelect(pg._id)}
                       className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-all duration-200 whitespace-nowrap ${
-                        selectedId === pg.id
+                        selectedPgId === pg._id
                           ? 'bg-primary/20 border-primary/50 text-primary shadow-[0_0_12px_hsl(var(--primary)/0.2)]'
                           : 'border-white/10 text-muted-foreground hover:border-white/25 hover:text-foreground'
                       }`}
                     >
                       <MapPin size={10} />
                       {pg.name}
-                      {pg.area && (
+                      {pg.location && (
                         <span className="opacity-50 font-normal normal-case tracking-normal">
-                          · {pg.area}
+                          · {pg.location}
                         </span>
                       )}
                     </button>
@@ -203,164 +225,282 @@ const IoTDashboard = () => {
           </div>
         </div>
 
-        {/* ── Active PG Header ─────────────────────────────────────── */}
+        {/* ── Active PG & Room Header ─────────────────────────────────────── */}
         <AnimatePresence mode="wait">
           {selectedPg && (
             <motion.div
-              key={selectedPg.id}
+              key={selectedPg._id}
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
               transition={{ duration: 0.25 }}
-              className="flex items-center gap-4 px-6 py-4 bg-white/[0.02] rounded-2xl border border-white/5"
+              className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 px-6 py-6 bg-white/[0.02] rounded-2xl border border-white/5 shadow-inner"
             >
-              <div className="p-3 bg-primary/10 rounded-2xl border border-primary/20 shadow-[0_0_20px_hsl(var(--primary)/0.1)]">
-                <MapPin className="h-5 w-5 text-primary" />
+              <div className="flex items-center gap-5">
+                <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20 shadow-[0_0_30px_hsl(var(--primary)/0.15)]">
+                  <Building2 className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-3">
+                    <p className="text-[10px] uppercase tracking-[0.25em] text-primary/70 font-bold">Smart Property</p>
+                    {selectedPg.food_details && (
+                      <Badge variant="outline" className="text-[8px] px-2 py-0.5 bg-warning/10 text-warning border-warning/20">
+                        <Utensils className="h-2.5 w-2.5 mr-1" /> {selectedPg.food_details}
+                      </Badge>
+                    )}
+                  </div>
+                  <h3 className="text-2xl font-display font-bold tracking-tight text-white mt-1">{selectedPg.name}</h3>
+                  <div className="flex items-center gap-4 mt-2">
+                    {selectedPg.google_maps_link && (
+                      <a 
+                        href={selectedPg.google_maps_link} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="text-[10px] font-bold text-primary hover:text-white flex items-center gap-1.5 bg-primary/10 px-3 py-1.5 rounded-full transition-all border border-primary/20"
+                      >
+                        <MapPin size={11} /> View on Maps
+                      </a>
+                    )}
+                    {selectedPg.virtual_tour_link && (
+                      <a 
+                        href={selectedPg.virtual_tour_link} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="text-[10px] font-bold text-info hover:text-white flex items-center gap-1.5 bg-info/10 px-3 py-1.5 rounded-full transition-all border border-info/20"
+                      >
+                        <Image size={11} /> Images & Videos
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-primary/60 font-bold">Monitored Asset</p>
-                <h3 className="text-lg font-display font-bold tracking-tight text-foreground">{selectedPg.name}</h3>
-                {(selectedPg as any).area && (
-                  <p className="text-[10px] text-muted-foreground">{(selectedPg as any).area}</p>
-                )}
-              </div>
+
+              {/* Room Selector */}
+              {selectedPg.rooms && selectedPg.rooms.length > 0 && (
+                <div className="flex items-center gap-2 bg-white/5 p-2 rounded-2xl border border-white/10 w-full lg:w-auto overflow-x-auto no-scrollbar">
+                  {selectedPg.rooms.map((room: any) => (
+                    <button
+                      key={room._id}
+                      onClick={() => setSelectedRoomId(room._id)}
+                      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                        selectedRoomId === room._id
+                          ? 'bg-primary text-primary-foreground shadow-[0_8px_16px_rgba(0,0,0,0.3)] scale-105'
+                          : 'hover:bg-white/10 text-muted-foreground'
+                      }`}
+                    >
+                      <DoorOpen size={15} />
+                      Room {room.roomNumber}
+                    </button>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* ── KPI Grid ─────────────────────────────────────────────── */}
         <AnimatePresence mode="wait">
-          <motion.div
-            key={selectedId + '-kpis'}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
-          >
-            <StatCard title="Climate Engine"  value={`${current.temp}°C`} icon={Thermometer} color="text-primary"  trend="+0.2° from baseline" />
-            <StatCard title="Live Power Load" value={`${current.elec} kW`} icon={Zap}         color="text-info"    trend="Avg. 1.2 kW/hr" />
-            <StatCard title="Core Density"    value={current.occ}          icon={Users}        color="text-success" trend="Nominal Load" />
-            <StatCard title="System Shield"   value="Secure"               icon={ShieldCheck}  color="text-primary" trend="Encryption: AES-256" />
-          </motion.div>
-        </AnimatePresence>
+          {selectedRoom && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-8">
+                <motion.div
+                  key={selectedRoomId + '-kpis'}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="grid grid-cols-1 md:grid-cols-3 gap-6"
+                >
+                  <StatCard 
+                    title="Temperature"     
+                    value={current.temp ? `${current.temp}°C` : '--'} 
+                    icon={Thermometer} 
+                    color={current.temp > 26 ? "text-destructive" : "text-primary"} 
+                    trend={current.temp > 26 ? "High Temp Alert!" : "Optimal Range"}
+                    isAlert={current.temp > 26}
+                  />
+                  <StatCard 
+                    title="Electricity Use" 
+                    value={current.elec ? `${current.elec} kW` : '--'} 
+                    icon={Zap}         
+                    color={current.elec > 1.8 ? "text-warning" : "text-info"} 
+                    trend={current.elec > 1.8 ? "Peak Load Detected" : "Standard Consumption"}
+                    isAlert={current.elec > 1.8}
+                  />
+                  
+                  <Card className="relative border border-white/5 bg-card/30 backdrop-blur-2xl shadow-xl overflow-hidden group hover:border-primary/20 transition-all duration-500 rounded-2xl">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60">Occupancy Status</p>
+                        <div className={`p-2.5 rounded-xl border border-white/5 transition-all duration-500 group-hover:scale-110`}>
+                          <Users className={`h-5 w-5 ${current.status === 'Vacant' ? 'text-success' : 'text-destructive'} drop-shadow-[0_0_8px_currentColor]`} />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl">
+                          {current.status === 'Vacant' ? '🟢' : '🔴'}
+                        </span>
+                        <h3 className="text-2xl font-display font-bold tracking-tight">
+                          {current.status || 'Loading...'}
+                        </h3>
+                      </div>
+                    </CardContent>
+                    <div className={`absolute bottom-0 left-0 h-[3px] w-0 group-hover:w-full transition-all duration-700 ${current.status === 'Vacant' ? 'bg-success shadow-[0_0_15px_hsl(var(--success))]' : 'bg-destructive shadow-[0_0_15px_hsl(var(--destructive))]'}`} />
+                  </Card>
+                </motion.div>
 
-        {/* ── Charts ───────────────────────────────────────────────── */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={selectedId + '-charts'}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.35, delay: 0.05 }}
-            className="grid grid-cols-1 lg:grid-cols-3 gap-8"
-          >
-            {/* Telemetry Flow */}
-            <Card className="lg:col-span-2 overflow-hidden border border-white/5 bg-card/30 backdrop-blur-2xl shadow-2xl rounded-2xl">
-              <CardHeader className="border-b border-white/5 bg-white/[0.02] py-5">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-[10px] font-bold uppercase tracking-[0.25em] flex items-center gap-3 text-primary/80">
-                    <Activity className="h-4 w-4" /> Telemetry Flow — {selectedPg?.name || '…'}
-                  </CardTitle>
-                  <Badge variant="outline" className="text-[8px] font-bold uppercase tracking-widest bg-primary/5 border-primary/20 text-primary">
-                    Live Sync
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="p-8">
-                <div className="h-[320px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id="gtTemp" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
-                      <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontWeight: 600 }} axisLine={false} tickLine={false} minTickGap={40} />
-                      <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                      <Tooltip
-                        contentStyle={{ borderRadius: '14px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(15,15,20,0.95)', backdropFilter: 'blur(20px)' }}
-                        itemStyle={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.1em' }}
-                      />
-                      <Area type="monotone" dataKey="temp" name="Temp (°C)"    stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#gtTemp)" />
-                      <Area type="monotone" dataKey="elec" name="Power (kW)"   stroke="hsl(var(--info))"    strokeWidth={2} fillOpacity={0} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+                {/* Telemetry Flow */}
+                <motion.div
+                   key={selectedRoomId + '-charts'}
+                   initial={{ opacity: 0, y: 12 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   exit={{ opacity: 0 }}
+                   transition={{ duration: 0.35, delay: 0.05 }}
+                >
+                  <Card className="overflow-hidden border border-white/5 bg-card/30 backdrop-blur-2xl shadow-2xl rounded-2xl">
+                    <CardHeader className="border-b border-white/5 bg-white/[0.02] py-5">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-[10px] font-bold uppercase tracking-[0.25em] flex items-center gap-3 text-primary/80">
+                          <Activity className="h-4 w-4" /> Telemetry Flow — Room {selectedRoom.roomNumber}
+                        </CardTitle>
+                        <Badge variant="outline" className="text-[8px] font-bold uppercase tracking-widest bg-primary/5 border-primary/20 text-primary">
+                          Live Sync
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-8">
+                      <div className="h-[320px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={chartData}>
+                            <defs>
+                              <linearGradient id="gtTemp" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
+                            <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontWeight: 600 }} axisLine={false} tickLine={false} minTickGap={40} />
+                            <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                            <Tooltip
+                              contentStyle={{ borderRadius: '14px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(15,15,20,0.95)', backdropFilter: 'blur(20px)' }}
+                              itemStyle={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.1em' }}
+                            />
+                            <Area type="monotone" dataKey="temp" name="Temp (°C)"    stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#gtTemp)" />
+                            <Area type="monotone" dataKey="elec" name="Power (kW)"   stroke="hsl(var(--info))"    strokeWidth={2} fillOpacity={0} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </div>
 
-            {/* Load Factor */}
-            <Card className="overflow-hidden border border-white/5 bg-card/30 backdrop-blur-2xl shadow-2xl rounded-2xl">
-              <CardHeader className="border-b border-white/5 bg-white/[0.02] py-5">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-[10px] font-bold uppercase tracking-[0.25em] flex items-center gap-3 text-success/80">
-                    <Users className="h-4 w-4" /> Load Factor
-                  </CardTitle>
-                  <Badge variant="outline" className="text-[9px] font-bold bg-success/5 text-success border-success/20">
-                    {((current.occ / 20) * 100).toFixed(0)}% Used
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="p-8">
-                <div className="h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id="gtLoad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%"  stopColor="hsl(var(--success))" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
-                      <XAxis dataKey="time" hide />
-                      <YAxis domain={[0, 25]} tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ borderRadius: '14px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(15,15,20,0.95)' }} />
-                      <Area type="stepAfter" dataKey="occ" name="Occupants" stroke="hsl(var(--success))" strokeWidth={3} fillOpacity={1} fill="url(#gtLoad)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                    <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Status</p>
-                    <p className="text-xs font-bold text-success">Optimal</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                    <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Threshold</p>
-                    <p className="text-xs font-bold text-primary">85% Limit</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </AnimatePresence>
+              {/* Side Panel: Smart Controls & Alerts */}
+              <div className="space-y-8">
+                <Card className="border border-white/5 bg-card/40 backdrop-blur-3xl shadow-2xl rounded-2xl overflow-hidden">
+                  <CardHeader className="border-b border-white/5 bg-white/[0.03] py-4">
+                    <CardTitle className="text-[10px] font-bold uppercase tracking-[0.2em] flex items-center gap-2 text-white/80">
+                      <Zap className="h-3.5 w-3.5 text-primary" /> Smart Room Controls
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-6">
+                    <ControlRow 
+                      label="Climate Control (AC)" 
+                      icon={Fan} 
+                      active={roomStates[selectedRoomId]?.ac ?? false} 
+                      onClick={() => toggleDevice(selectedRoomId, 'ac', roomStates[selectedRoomId]?.ac ?? false)}
+                      color="bg-primary"
+                    />
+                    <ControlRow 
+                      label="Smart Lighting" 
+                      icon={Lightbulb} 
+                      active={roomStates[selectedRoomId]?.lights ?? true} 
+                      onClick={() => toggleDevice(selectedRoomId, 'lights', roomStates[selectedRoomId]?.lights ?? true)}
+                      color="bg-info"
+                    />
+                    <ControlRow 
+                      label="Digital Door Lock" 
+                      icon={roomStates[selectedRoomId]?.lock ?? true ? Lock : Unlock} 
+                      active={roomStates[selectedRoomId]?.lock ?? true} 
+                      onClick={() => toggleDevice(selectedRoomId, 'lock', roomStates[selectedRoomId]?.lock ?? true)}
+                      color="bg-success"
+                    />
+                  </CardContent>
+                </Card>
 
-        {/* ── Grid Intelligence ────────────────────────────────────── */}
-        <Card className="border border-white/5 bg-primary/5 backdrop-blur-2xl shadow-xl rounded-2xl p-8">
-          <div className="flex flex-col md:flex-row gap-8 items-center">
-            <div className="p-4 bg-primary/10 rounded-2xl shrink-0">
-              <Zap className="h-8 w-8 text-primary animate-pulse" />
+                <Card className="border border-white/5 bg-destructive/5 backdrop-blur-2xl rounded-2xl overflow-hidden">
+                  <CardHeader className="py-4 bg-destructive/10">
+                    <CardTitle className="text-[10px] font-bold uppercase tracking-[0.2em] flex items-center gap-2 text-destructive">
+                      <ShieldCheck className="h-3.5 w-3.5" /> Security & Safety
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
+                        <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                        <p className="text-[10px] font-bold text-white/70 uppercase">Smoke Detectors Active</p>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
+                        <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                        <p className="text-[10px] font-bold text-white/70 uppercase">Intrusion Sensor: Secure</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-primary mb-2">
-                Grid Intelligence: Understanding Live Load
-              </h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                The <span className="text-foreground font-bold">Live Power Load (kW)</span> reflects the instantaneous electrical demand of the building. In a real-world PG environment, these values fluctuate every second as air conditioners cycle, water heaters activate, or occupants plug in devices.
-                Our telemetry stream captures these micro-fluctuations to provide an architectural "heartbeat" of your property's energy health.
-              </p>
-            </div>
-          </div>
-        </Card>
+          )}
+        </AnimatePresence>
 
       </div>
     </AppLayout>
   );
 };
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+const ControlRow = ({ label, icon: Icon, active, onClick, color }: any) => (
+  <div className="flex items-center justify-between group">
+    <div className="flex items-center gap-3">
+      <div className={`p-2 rounded-lg ${active ? color + '/20' : 'bg-white/5'} transition-colors group-hover:scale-110 duration-300`}>
+        <Icon className={`h-4 w-4 ${active ? color.replace('bg-', 'text-') : 'text-muted-foreground'}`} />
+      </div>
+      <span className="text-[11px] font-bold text-white/80">{label}</span>
+    </div>
+    <button 
+      onClick={onClick}
+      className={`w-10 h-5 rounded-full p-1 transition-all duration-500 ${active ? color : 'bg-white/10'}`}
+    >
+      <div className={`w-3 h-3 bg-white rounded-full transition-all duration-500 ${active ? 'translate-x-5' : 'translate-x-0'}`} />
+    </button>
+  </div>
+);
+
+const StatCard = ({ title, value, icon: Icon, color, trend, isAlert }: any) => (
+  <Card className={`relative border ${isAlert ? 'border-destructive/30 bg-destructive/5' : 'border-white/5 bg-card/30'} backdrop-blur-2xl shadow-xl overflow-hidden group transition-all duration-500 rounded-2xl`}>
+    <CardContent className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${isAlert ? 'text-destructive/80' : 'text-muted-foreground/60'}`}>{title}</p>
+        <div className={`p-2.5 rounded-xl border border-white/5 transition-all duration-500 group-hover:scale-110`}>
+          <Icon className={`h-5 w-5 ${color} ${isAlert ? 'animate-bounce' : ''} drop-shadow-[0_0_8px_currentColor]`} />
+        </div>
+      </div>
+      <div className="flex items-baseline gap-2">
+        <h3 className={`text-3xl font-display font-bold tracking-tight ${isAlert ? 'text-destructive' : ''}`}>{value}</h3>
+      </div>
+      {trend && (
+        <p className={`text-[9px] mt-3 flex items-center gap-2 font-bold uppercase tracking-widest ${isAlert ? 'text-destructive' : 'text-muted-foreground/50'}`}>
+          <Activity className={`h-3 w-3 ${isAlert ? 'text-destructive' : 'text-primary/40'}`} /> {trend}
+        </p>
+      )}
+    </CardContent>
+    <div className={`absolute bottom-0 left-0 h-[3px] w-0 group-hover:w-full transition-all duration-700 ${isAlert ? 'bg-destructive shadow-[0_0_15px_hsl(var(--destructive))]' : 'bg-primary shadow-[0_0_15px_hsl(var(--primary))]'}`} />
+  </Card>
+);
+
+      </div>
+    </AppLayout>
+  );
+};
+
 const StatCard = ({ title, value, icon: Icon, color, trend }: any) => (
   <Card className="relative border border-white/5 bg-card/30 backdrop-blur-2xl shadow-xl overflow-hidden group hover:border-primary/20 transition-all duration-500 rounded-2xl">
     <CardContent className="p-6">
@@ -373,9 +513,11 @@ const StatCard = ({ title, value, icon: Icon, color, trend }: any) => (
       <div className="flex items-baseline gap-2">
         <h3 className="text-3xl font-display font-bold tracking-tight">{value}</h3>
       </div>
-      <p className="text-[9px] text-muted-foreground/50 mt-3 flex items-center gap-2 font-bold uppercase tracking-widest">
-        <Activity className="h-3 w-3 text-primary/40" /> {trend}
-      </p>
+      {trend && (
+        <p className="text-[9px] text-muted-foreground/50 mt-3 flex items-center gap-2 font-bold uppercase tracking-widest">
+          <Activity className="h-3 w-3 text-primary/40" /> {trend}
+        </p>
+      )}
     </CardContent>
     <div className="absolute bottom-0 left-0 h-[3px] w-0 group-hover:w-full transition-all duration-700 bg-primary shadow-[0_0_15px_hsl(var(--primary))]" />
   </Card>
