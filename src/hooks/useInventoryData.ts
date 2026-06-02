@@ -96,7 +96,11 @@ export function useUpdateRoom() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['rooms'] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rooms'] });
+      qc.invalidateQueries({ queryKey: ['owner-properties'] });
+      qc.invalidateQueries({ queryKey: ['inventory-os'] });
+    },
   });
 }
 
@@ -153,6 +157,8 @@ export function useConfirmRoomStatus() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rooms'] });
+      qc.invalidateQueries({ queryKey: ['owner-properties'] });
+      qc.invalidateQueries({ queryKey: ['inventory-os'] });
       toast.success('Status confirmed');
     },
     onError: (e: any) => toast.error(e.message),

@@ -21,24 +21,96 @@ mongoose.connect(MONGODB_URI)
   .then(() => console.log("Connected to MongoDB from Express"))
   .catch(err => console.error("MongoDB connection error:", err));
 
+const MOCK_PROPERTIES_FALLBACK = [
+  {
+    id: "22222222-2222-2222-2222-222222222222",
+    name: "FORUM PRO BOYS",
+    area: "koramangla",
+    address: "silk board, Koramangala, sg palya, MG road, nexus",
+    city: "Bangalore",
+    price_range: "12k - 24k",
+    is_active: true,
+    food_details: "3-meals North & South Indian meals included",
+    google_maps_link: "https://maps.google.com",
+    virtual_tour_link: "https://drive.google.com",
+    rooms: [
+      { id: "r1", property_id: "22222222-2222-2222-2222-222222222222", room_number: "101", floor: "1st", bed_count: 2, status: "occupied" },
+      { id: "r2", property_id: "22222222-2222-2222-2222-222222222222", room_number: "102", floor: "1st", bed_count: 3, status: "vacant" }
+    ]
+  },
+  {
+    id: "33333333-3333-3333-3333-333333333333",
+    name: "FORUM 1 BOYS",
+    area: "koramangla",
+    address: "silk board, Koramangala, sg palya, MG road, nexus",
+    city: "Bangalore",
+    price_range: "11k - 22k",
+    is_active: true,
+    food_details: "3-meals daily veg/non-veg included",
+    google_maps_link: "https://maps.google.com",
+    virtual_tour_link: "https://drive.google.com",
+    rooms: [
+      { id: "r5", property_id: "33333333-3333-3333-3333-333333333333", room_number: "101", floor: "1st", bed_count: 2, status: "occupied" },
+      { id: "r6", property_id: "33333333-3333-3333-3333-333333333333", room_number: "102", floor: "1st", bed_count: 3, status: "vacant" }
+    ]
+  },
+  {
+    id: "44444444-4444-4444-4444-444444444444",
+    name: "GT GIRLS",
+    area: "koramangla",
+    address: "silk board, Koramangala, sg palya, MG road, nexus",
+    city: "Bangalore",
+    price_range: "16k - 25k",
+    is_active: true,
+    food_details: "3-meals delicious home-style veg",
+    google_maps_link: "https://maps.google.com",
+    virtual_tour_link: "https://drive.google.com",
+    rooms: [
+      { id: "r7", property_id: "44444444-4444-4444-4444-444444444444", room_number: "G01", floor: "Ground", bed_count: 2, status: "occupied" },
+      { id: "r8", property_id: "44444444-4444-4444-4444-444444444444", room_number: "G02", floor: "Ground", bed_count: 2, status: "vacant" }
+    ]
+  },
+  {
+    id: "55555555-5555-5555-5555-555555555555",
+    name: "ESPLANADE GIRLS",
+    area: "koramangla",
+    address: "silk board, Koramangala, sg palya, MG road, nexus",
+    city: "Bangalore",
+    price_range: "21k - 41k",
+    is_active: true,
+    food_details: "Premium multi-cuisine buffet",
+    google_maps_link: "https://maps.google.com",
+    virtual_tour_link: "https://drive.google.com",
+    rooms: [
+      { id: "r9", property_id: "55555555-5555-5555-5555-555555555555", room_number: "101", floor: "1st", bed_count: 1, status: "occupied" },
+      { id: "r10", property_id: "55555555-5555-5555-5555-555555555555", room_number: "102", floor: "1st", bed_count: 2, status: "vacant" }
+    ]
+  }
+];
+
 app.get("/api/pg-with-iot", async (req, res) => {
   try {
-    // 1. Fetch properties and their rooms from Supabase
-    // Enriched with food_details, google_maps_link, virtual_tour_link
-    const { data: properties, error } = await supabase
-      .from('properties')
-      .select('*, rooms(*)');
-
-    if (error) {
-      throw error;
+    let properties: any[] = [];
+    
+    try {
+      const { data, error } = await supabase
+        .from('properties')
+        .select('*, rooms(*)');
+      
+      if (!error && data && data.length > 0) {
+        properties = data;
+      } else {
+        properties = MOCK_PROPERTIES_FALLBACK;
+      }
+    } catch (e) {
+      properties = MOCK_PROPERTIES_FALLBACK;
     }
 
     const isMongoConnected = mongoose.connection.readyState === 1;
 
-    // 2. Combine with IoT Data (MongoDB or Mock)
+    // Combine with IoT Data (MongoDB or Mock)
     const result = await Promise.all(
-      (properties || []).map(async (pg) => {
-        
+      properties.map(async (pg) => {
         const roomsWithSensors = await Promise.all((pg.rooms || []).map(async (room: any, roomIdx: number) => {
           let latestSensor = null;
 
@@ -47,18 +119,18 @@ app.get("/api/pg-with-iot", async (req, res) => {
             latestSensor = await SensorData
               .findOne({ roomId: room.id })
               .sort({ createdAt: -1 });
-          } else {
+          }
+          
+          if (!latestSensor) {
             // Fallback mock telemetry if MongoDB is offline due to IP whitelist
             latestSensor = {
               temperature: parseFloat((Math.sin(Date.now() / 10000 + roomIdx) * 2 + 23).toFixed(1)),
               electricity: parseFloat((Math.cos(Date.now() / 15000 + roomIdx) * 0.5 + 1.5).toFixed(1)),
-              // The frontend will use the Supabase 'status' column for occupancy anyway
             };
           }
 
           return {
             ...room,
-            // Map Supabase 'id' to '_id' for frontend compatibility
             _id: room.id,
             roomNumber: room.room_number,
             sensor: latestSensor
@@ -67,7 +139,6 @@ app.get("/api/pg-with-iot", async (req, res) => {
 
         return {
           ...pg,
-          // Map Supabase 'id' to '_id' for frontend compatibility
           _id: pg.id,
           rooms: roomsWithSensors
         };

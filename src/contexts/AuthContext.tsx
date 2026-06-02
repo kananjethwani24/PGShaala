@@ -47,28 +47,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (err) {
       console.error('Error fetching user role:', err);
       setRole(null);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchUserRole(session.user.id);
+        await fetchUserRole(session.user.id);
       } else {
         setRole(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchUserRole(session.user.id);
+        await fetchUserRole(session.user.id);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();

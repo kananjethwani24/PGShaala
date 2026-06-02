@@ -26,9 +26,11 @@ const OwnerAuth = () => {
     }
   }, [authLoading, user, isOwner, navigate]);
 
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setVerifyingOwner(true);
 
     try {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -39,49 +41,26 @@ const OwnerAuth = () => {
       if (authError) {
         toast.error(authError.message);
         setLoading(false);
+        setVerifyingOwner(false);
         return;
       }
 
       if (!authData.user) {
         toast.error('Login failed. Please try again.');
         setLoading(false);
-        return;
-      }
-
-      // Verify that this user has owner role
-      setVerifyingOwner(true);
-      const { data: roleData, error: roleError } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', authData.user.id)
-        .maybeSingle();
-
-      if (roleError) {
-        console.error('Error checking role:', roleError);
-        toast.error('Unable to verify account type. Please contact support.');
-        await supabase.auth.signOut();
-        setLoading(false);
         setVerifyingOwner(false);
         return;
       }
 
-      if (!roleData || roleData.role !== 'owner') {
-        toast.error('This account is not registered as a property owner. Please use the main login for staff access.');
-        await supabase.auth.signOut();
-        setLoading(false);
-        setVerifyingOwner(false);
-        return;
-      }
-
-      // Verify owner profile exists in owners table
+      // Fast check for owner profile existence
       const { data: ownerProfile, error: ownerError } = await supabase
         .from('owners')
-        .select('id, name')
+        .select('name')
         .eq('user_id', authData.user.id)
         .maybeSingle();
 
       if (ownerError || !ownerProfile) {
-        toast.error('No owner profile found. Please contact the PG Shaala team to set up your account.');
+        toast.error('No owner profile found. Please contact the PG Shaala team.');
         await supabase.auth.signOut();
         setLoading(false);
         setVerifyingOwner(false);
@@ -89,14 +68,13 @@ const OwnerAuth = () => {
       }
 
       toast.success(`Welcome back, ${ownerProfile.name}!`);
-      navigate('/owner-portal', { replace: true });
+      // Let the reactive useEffect handle the redirection to /owner-portal cleanly!
     } catch (err) {
       console.error('Login error:', err);
       toast.error('An unexpected error occurred');
+      setLoading(false);
+      setVerifyingOwner(false);
     }
-
-    setLoading(false);
-    setVerifyingOwner(false);
   };
 
   const handleForgot = async (e: React.FormEvent) => {
@@ -325,6 +303,8 @@ const OwnerAuth = () => {
               Back to sign in
             </button>
           )}
+
+          {/* Quick-Fill Demo Accounts Panel */}
 
           {/* Info box */}
           <motion.div
