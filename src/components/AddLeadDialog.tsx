@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, AlertTriangle, Sparkles, Phone, Mail, MapPin, IndianRupee, User, StickyNote } from 'lucide-react';
+import { Plus, AlertTriangle, Sparkles, Phone, Mail, MapPin, IndianRupee, User, StickyNote, Tag } from 'lucide-react';
 import { useCreateLead, useAgents } from '@/hooks/useCrmData';
 import { SOURCE_LABELS } from '@/types/crm';
 import { toast } from 'sonner';
@@ -17,10 +17,23 @@ const AddLeadDialog = () => {
   const [open, setOpen] = useState(false);
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState<ParsedLead | null>(null);
+  const INTEREST_OPTIONS = [
+    'Fitness', 'Gaming', 'Tech', 'Coding', 'Music', 'Art',
+    'Yoga', 'Reading', 'Cooking', 'Socializing', 'Sports', 'Cricket',
+    'Startups', 'Networking',
+  ];
+
   const [form, setForm] = useState({
     name: '', phone: '', email: '', source: 'whatsapp' as string,
     budget: '', preferred_location: '', notes: '', assigned_agent_id: '' as string,
   });
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+
+  const toggleInterest = (interest: string) => {
+    setSelectedInterests(prev =>
+      prev.includes(interest) ? prev.filter(i => i !== interest) : [...prev, interest]
+    );
+  };
   const [duplicate, setDuplicate] = useState<{ id: string; name: string; phone: string; status: string } | null>(null);
 
   const createLead = useCreateLead();
@@ -68,12 +81,14 @@ const AddLeadDialog = () => {
         notes: form.notes || null,
         assigned_agent_id: agentId,
         status: 'new',
-      });
+        interests: selectedInterests.length > 0 ? selectedInterests : undefined,
+      } as any);
       toast.success('Lead created successfully!');
       setOpen(false);
       setDuplicate(null);
       setParsed(null);
       setRawText('');
+      setSelectedInterests([]);
       setForm({ name: '', phone: '', email: '', source: 'whatsapp', budget: '', preferred_location: '', notes: '', assigned_agent_id: '' });
     } catch (err: any) {
       toast.error(err.message || 'Failed to create lead');
@@ -200,6 +215,32 @@ const AddLeadDialog = () => {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs flex items-center gap-1.5"><Tag size={11} className="text-accent" /> Interests <span className="text-muted-foreground font-normal">(click to select)</span></Label>
+            <div className="flex flex-wrap gap-1.5">
+              {INTEREST_OPTIONS.map(interest => {
+                const active = selectedInterests.includes(interest);
+                return (
+                  <button
+                    key={interest}
+                    type="button"
+                    onClick={() => toggleInterest(interest)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
+                      active
+                        ? 'bg-accent/20 border-accent text-accent'
+                        : 'bg-muted/40 border-border text-muted-foreground hover:border-accent/50 hover:text-foreground'
+                    }`}
+                  >
+                    {interest}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedInterests.length > 0 && (
+              <p className="text-[10px] text-muted-foreground">{selectedInterests.length} selected — improves PG matching accuracy</p>
+            )}
           </div>
 
           <div className="space-y-1.5">

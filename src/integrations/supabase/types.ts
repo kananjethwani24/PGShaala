@@ -557,6 +557,7 @@ export type Database = {
           email: string | null
           first_response_time_min: number | null
           id: string
+          interests: string[] | null
           last_activity_at: string
           lead_score: number | null
           name: string
@@ -857,6 +858,7 @@ export type Database = {
           gender_allowed: string | null
           google_maps_link: string | null
           id: string
+          interests: string[] | null
           is_active: boolean
           is_verified: boolean | null
           latitude: number | null
@@ -883,6 +885,7 @@ export type Database = {
           gender_allowed?: string | null
           google_maps_link?: string | null
           id?: string
+          interests?: string[] | null
           is_active?: boolean
           is_verified?: boolean | null
           latitude?: number | null
@@ -909,6 +912,7 @@ export type Database = {
           gender_allowed?: string | null
           google_maps_link?: string | null
           id?: string
+          interests?: string[] | null
           is_active?: boolean
           is_verified?: boolean | null
           latitude?: number | null
@@ -1185,6 +1189,7 @@ export type Database = {
           created_at?: string
           expires_at: string
           id?: string
+          interests?: string[] | null
           is_active?: boolean
           lead_id?: string | null
           lock_type: Database["public"]["Enums"]["lock_type"]
@@ -1198,6 +1203,7 @@ export type Database = {
           created_at?: string
           expires_at?: string
           id?: string
+          interests?: string[] | null
           is_active?: boolean
           lead_id?: string | null
           lock_type?: Database["public"]["Enums"]["lock_type"]
@@ -1253,6 +1259,7 @@ export type Database = {
           created_at?: string
           dispatch_rule?: string
           id?: string
+          interests?: string[] | null
           is_active?: boolean
           last_assigned_idx?: number
           member_ids?: string[]
@@ -1264,6 +1271,7 @@ export type Database = {
           created_at?: string
           dispatch_rule?: string
           id?: string
+          interests?: string[] | null
           is_active?: boolean
           last_assigned_idx?: number
           member_ids?: string[]
@@ -1407,6 +1415,7 @@ export type Database = {
           color?: string | null
           created_at?: string
           id?: string
+          interests?: string[] | null
           is_active?: boolean
           manager_id?: string | null
           name: string
@@ -1417,6 +1426,7 @@ export type Database = {
           color?: string | null
           created_at?: string
           id?: string
+          interests?: string[] | null
           is_active?: boolean
           manager_id?: string | null
           name?: string
@@ -1459,7 +1469,12 @@ export type Database = {
       }
       get_property_effort: { Args: { p_property_id: string }; Returns: Json }
       match_beds_for_lead: {
-        Args: { p_budget: number; p_location: string; p_room_type?: string }
+        Args: {
+          p_budget: number
+          p_location: string
+          p_room_type?: string
+          p_interests?: string[]
+        }
         Returns: {
           bed_id: string
           bed_number: string
@@ -1467,6 +1482,7 @@ export type Database = {
           property_area: string
           property_id: string
           property_name: string
+          property_interests: string[] | null
           rent_per_bed: number
           room_id: string
           room_number: string

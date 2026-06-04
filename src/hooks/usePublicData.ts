@@ -194,6 +194,7 @@ export function useSubmitLead() {
       email?: string;
       preferred_location?: string;
       budget?: string;
+      interests?: string[];
       notes?: string;
       source?: string;
       property_id?: string;
@@ -213,6 +214,7 @@ export function useSubmitLead() {
             email: params.email || undefined,
             preferred_location: params.preferred_location || undefined,
             budget: params.budget || undefined,
+            interests: params.interests || undefined,
             notes: params.notes || undefined,
             property_id: params.property_id || undefined,
             updated_at: new Date().toISOString(),
@@ -231,6 +233,7 @@ export function useSubmitLead() {
             email: params.email || undefined,
             preferred_location: params.preferred_location || undefined,
             budget: params.budget || undefined,
+            interests: params.interests || undefined,
             notes: params.notes || undefined,
             source: (params.source as any) || 'website',
             property_id: params.property_id || undefined,

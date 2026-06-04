@@ -11,7 +11,8 @@ import { useConversations, useFollowUps, useCreateFollowUp } from '@/hooks/useLe
 import { useActivityLog } from '@/hooks/useActivityLog';
 import { useBookingsByLead } from '@/hooks/useBookings';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Phone, Mail, MapPin, IndianRupee, Clock, MessageCircle, CalendarCheck, User, Star, Send, Bell, ArrowRightLeft, Eye, Activity, Sparkles, Loader2, Receipt } from 'lucide-react';
+import { Phone, Mail, MapPin, IndianRupee, Clock, MessageCircle, CalendarCheck, User, Star, Send, Bell, ArrowRightLeft, Eye, Activity, Sparkles, Loader2, Receipt, Building } from 'lucide-react';
+import { useDbMatchBeds } from '@/hooks/useZones';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -41,6 +42,7 @@ const LeadDetailDrawer = ({ lead, open, onClose }: Props) => {
   const { data: followUps } = useFollowUps(lead?.id);
   const { data: activityLog } = useActivityLog(lead?.id);
   const { data: bookings } = useBookingsByLead(lead?.id);
+  const { data: matches, isLoading: matchesLoading } = useDbMatchBeds(lead?.id);
   const createFollowUp = useCreateFollowUp();
   const [note, setNote] = useState('');
   const [reminderDate, setReminderDate] = useState('');
@@ -154,7 +156,12 @@ const LeadDetailDrawer = ({ lead, open, onClose }: Props) => {
                 <IndianRupee size={12} /> {lead.budget}
               </div>
             )}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {(lead as any).interests && (lead as any).interests.length > 0 && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground col-span-2 mt-1">
+                <Sparkles size={12} className="text-cyan-400" /> Interests: {(lead as any).interests.join(', ')}
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
               <Clock size={12} /> {lead.first_response_time_min != null ? `${lead.first_response_time_min}m response` : 'No response yet'}
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -233,10 +240,11 @@ const LeadDetailDrawer = ({ lead, open, onClose }: Props) => {
 
         {/* Tabs */}
         <Tabs defaultValue="timeline" className="p-6">
-          <TabsList className="w-full grid grid-cols-3">
+          <TabsList className="w-full grid grid-cols-4">
             <TabsTrigger value="timeline" className="text-xs">Activity</TabsTrigger>
             <TabsTrigger value="conversations" className="text-xs">Messages</TabsTrigger>
             <TabsTrigger value="followups" className="text-xs">Follow-ups</TabsTrigger>
+            <TabsTrigger value="matches" className="text-xs">Matches</TabsTrigger>
           </TabsList>
 
           <TabsContent value="timeline" className="mt-4 space-y-2">
@@ -341,6 +349,42 @@ const LeadDetailDrawer = ({ lead, open, onClose }: Props) => {
                 <CalendarCheck size={12} /> {createFollowUp.isPending ? 'Scheduling...' : 'Schedule Follow-up'}
               </Button>
             </div>
+          </TabsContent>
+
+          <TabsContent value="matches" className="mt-4 space-y-3">
+            {matchesLoading && <div className="py-8 text-center flex flex-col items-center justify-center text-muted-foreground"><Loader2 className="animate-spin mb-2" size={20} /> <span className="text-xs">Finding matches...</span></div>}
+            {!matchesLoading && (!matches || matches.length === 0) && (
+              <p className="text-xs text-muted-foreground text-center py-6">No matching properties found.</p>
+            )}
+            {!matchesLoading && matches?.map((m: any) => (
+              <div key={m.bed_id} className="p-3 rounded-lg border border-white/10 bg-secondary/30 text-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Building size={14} className="text-cyan-400" />
+                    <span className="font-bold text-foreground">{m.property_name}</span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] bg-black/40 text-cyan-300 border-cyan-500/30">
+                    {m.match_score}% Match
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-muted-foreground mb-2">
+                  <span className="flex items-center gap-1"><MapPin size={10} /> {m.property_area}</span>
+                  <span className="flex items-center gap-1 font-medium text-foreground"><IndianRupee size={10} /> {Number(m.rent_per_bed).toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="secondary" className="text-[9px]">Room {m.room_number}</Badge>
+                  <Badge variant="secondary" className="text-[9px]">Bed {m.bed_number}</Badge>
+                </div>
+                {m.property_interests && m.property_interests.length > 0 && (
+                  <div className="pt-2 border-t border-white/5 flex flex-wrap gap-1">
+                    <span className="text-[9px] text-muted-foreground w-full mb-0.5">Property Interests:</span>
+                    {m.property_interests.map((i: string) => (
+                      <span key={i} className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded border border-white/5 text-white/70">{i}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </TabsContent>
         </Tabs>
       </SheetContent>

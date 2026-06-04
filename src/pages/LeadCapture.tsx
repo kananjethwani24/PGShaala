@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 
 const LeadCapture = () => {
   const [form, setForm] = useState({
-    name: '', phone: '', email: '', source: 'website', budget: '', preferred_location: '', notes: '',
+    name: '', phone: '', email: '', source: 'website', budget: '', preferred_location: '', interests: '', notes: '',
   });
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -36,6 +36,7 @@ const LeadCapture = () => {
         email: form.email || undefined,
         budget: form.budget || undefined,
         preferred_location: form.preferred_location || undefined,
+        interests: form.interests ? form.interests.split(',').map(i => i.trim()).filter(Boolean) : undefined,
         notes: form.notes || undefined,
         source: form.source,
       });
@@ -108,6 +109,11 @@ const LeadCapture = () => {
                     <Label className="text-xs">Preferred Area</Label>
                     <Input placeholder="Locality" value={form.preferred_location} onChange={e => setForm(f => ({ ...f, preferred_location: e.target.value }))} className="h-11 rounded-xl" />
                   </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Interests</Label>
+                  <Input placeholder="E.g. Fitness, Gaming, Reading (comma-separated)" value={form.interests} onChange={e => setForm(f => ({ ...f, interests: e.target.value }))} className="h-11 rounded-xl" />
                 </div>
 
                 <div className="space-y-1.5">

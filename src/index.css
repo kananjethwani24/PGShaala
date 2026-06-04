@@ -131,6 +131,206 @@
     box-shadow: inset 2px 0 0 hsl(var(--sidebar-primary));
   }
 
+  /* ── New Sidebar (sb-*) ── */
+  .sb-root {
+    background: #0d1117;
+    border-right: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Logo */
+  .sb-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 20px 20px 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    flex-shrink: 0;
+  }
+  .sb-logo-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7c3aed, #3b82f6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 13px;
+    color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 2px rgba(124,58,237,0.25);
+  }
+  .sb-logo-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+  .sb-logo-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.05em;
+    color: #e2e8f0;
+    line-height: 1.2;
+  }
+  .sb-logo-sub {
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: rgba(255,255,255,0.3);
+    text-transform: uppercase;
+    margin-top: 1px;
+  }
+  .sb-close {
+    color: rgba(255,255,255,0.3);
+    padding: 4px;
+    border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+    flex-shrink: 0;
+  }
+  .sb-close:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
+
+  /* Nav */
+  .sb-nav {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 0 8px;
+    scrollbar-width: none;
+  }
+  .sb-nav::-webkit-scrollbar { display: none; }
+
+  .sb-group { margin-bottom: 4px; }
+
+  .sb-group-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.28);
+    padding: 14px 20px 6px;
+  }
+
+  .sb-items { padding: 0 10px; }
+
+  .sb-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.52);
+    transition: background 0.15s, color 0.15s;
+    cursor: pointer;
+    text-decoration: none;
+    position: relative;
+    margin-bottom: 1px;
+  }
+  .sb-link:hover {
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.85);
+  }
+  .sb-link--active {
+    background: rgba(99,102,241,0.12);
+    color: #e2e8f0;
+  }
+  .sb-link--active:hover {
+    background: rgba(99,102,241,0.16);
+  }
+
+  .sb-icon { color: rgba(255,255,255,0.38); flex-shrink: 0; }
+  .sb-icon--active { color: #a5b4fc; flex-shrink: 0; }
+
+  .sb-label { flex: 1; font-family: var(--font-body); }
+
+  .sb-active-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #818cf8;
+    flex-shrink: 0;
+  }
+
+  /* Footer buttons */
+  .sb-footer {
+    padding: 6px 10px 2px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .sb-footer-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.45);
+    transition: background 0.15s, color 0.15s;
+    cursor: pointer;
+    margin-bottom: 1px;
+  }
+  .sb-footer-btn:hover {
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.75);
+  }
+  .sb-footer-btn--danger {
+    color: #f97316;
+  }
+  .sb-footer-btn--danger:hover {
+    background: rgba(249,115,22,0.1);
+    color: #fb923c;
+  }
+
+  /* User strip */
+  .sb-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px 16px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    flex-shrink: 0;
+  }
+  .sb-user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .sb-user-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+  .sb-user-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+  .sb-user-email {
+    font-size: 10px;
+    color: rgba(255,255,255,0.32);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .badge-pipeline {
     @apply inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium;
   }

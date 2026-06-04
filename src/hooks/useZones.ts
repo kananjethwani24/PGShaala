@@ -187,16 +187,113 @@ export function useRouteLeadToZone() {
 }
 
 // ─── DB Matching ────────────────────────────────────
-export function useDbMatchBeds() {
-  return useMutation({
-    mutationFn: async (params: { location: string; budget: number; roomType?: string }) => {
-      const { data, error } = await supabase.rpc('match_beds_for_lead', {
-        p_location: params.location,
-        p_budget: params.budget,
-        p_room_type: params.roomType || null,
+export function useDbMatchBeds(leadId?: string) {
+  return useQuery({
+    queryKey: ['db-match', leadId],
+    queryFn: async () => {
+      if (!leadId) return [];
+
+      // Fetch lead details
+      const { data: lead, error: leadErr } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('id', leadId)
+        .single();
+
+      if (leadErr) throw new Error(`Lead fetch failed: ${leadErr.message}`);
+      if (!lead) return [];
+
+      // Parse budget — handles "12k", "1.5L", "₹18,000", etc.
+      const rawBudget = (lead.budget || '').toLowerCase().replace(/[₹,\s]/g, '');
+      const budgetMatch = rawBudget.match(/(\d+(?:\.\d+)?)\s*(k|l|lakh|cr)?/);
+      let budgetVal = 0;
+      if (budgetMatch) {
+        let val = parseFloat(budgetMatch[1]);
+        const suffix = budgetMatch[2];
+        if (suffix === 'k') val *= 1000;
+        else if (suffix === 'l' || suffix === 'lakh') val *= 100_000;
+        else if (suffix === 'cr') val *= 10_000_000;
+        budgetVal = val;
+      }
+
+      // ── Primary: RPC function ──────────────────────────────
+      const { data: rpcData, error: rpcError } = await supabase.rpc('match_beds_for_lead', {
+        p_location:  lead.preferred_location || '',
+        p_budget:    budgetVal,
+        p_room_type: null,
+        p_interests: (lead as any).interests || [],
       });
-      if (error) throw error;
-      return data;
+
+      if (rpcError) {
+        console.warn('[Matching] RPC failed, falling back to direct query:', rpcError.message);
+
+        // ── Fallback: direct query (no scoring) ───────────────
+        const { data: fallback, error: fbError } = await supabase
+          .from('beds')
+          .select(`
+            id,
+            bed_number,
+            status,
+            room_id,
+            rooms!inner(
+              id,
+              room_number,
+              room_type,
+              rent_per_bed,
+              property_id,
+              properties!inner(
+                id,
+                name,
+                area,
+                interests,
+                google_maps_link,
+                photos,
+                is_active
+              )
+            )
+          `)
+          .in('status', ['vacant', 'vacating_soon'])
+          .eq('rooms.properties.is_active', true)
+          .limit(20);
+
+        if (fbError) throw new Error(`Match query failed: ${fbError.message}`);
+
+        // Shape fallback data to match RPC structure
+        const shaped = (fallback || []).map((b: any) => ({
+          bed_id:             b.id,
+          bed_number:         b.bed_number,
+          room_id:            b.rooms?.id,
+          room_number:        b.rooms?.room_number,
+          room_type:          b.rooms?.room_type,
+          rent_per_bed:       b.rooms?.rent_per_bed ?? 0,
+          property_id:        b.rooms?.properties?.id,
+          property_name:      b.rooms?.properties?.name,
+          property_area:      b.rooms?.properties?.area,
+          property_interests: b.rooms?.properties?.interests ?? [],
+          property_google_maps_link: b.rooms?.properties?.google_maps_link,
+          property_photos:    b.rooms?.properties?.photos ?? [],
+          match_score:        50, // default score for fallback
+        }));
+
+        // Deduplicate by property
+        const seen = new Set<string>();
+        return shaped.filter((m: any) => {
+          if (!m.property_id || seen.has(m.property_id)) return false;
+          seen.add(m.property_id);
+          return true;
+        });
+      }
+
+      // Deduplicate RPC results by property
+      const seen = new Set<string>();
+      return (rpcData || []).filter((m: any) => {
+        if (!m.property_id || seen.has(m.property_id)) return false;
+        seen.add(m.property_id);
+        return true;
+      });
     },
+    enabled: !!leadId,
+    staleTime: 0,
+    retry: 1,
   });
 }
