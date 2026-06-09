@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import AppLayout from '@/components/AppLayout';
-import { useLeads } from '@/hooks/useCrmData';
+import { useLeads, useCreateLead } from '@/hooks/useCrmData';
 import { useDbMatchBeds } from '@/hooks/useZones';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Image as ImageIcon } from 'lucide-react';
 import { PG_EXCEL_LOOKUP, PG_AREAS_FROM_EXCEL } from '@/data/pgExcelData';
-
+import { parseLeadText, type ParsedLead } from '@/lib/parseLeadText';
+import { toast } from 'sonner';
 const ZONES = ['All Zones', 'KORA', 'MWB', 'MTP', 'YPR'];
 const CONFIG_AREAS = [
   'BTM Layout', 'Bannerghatta', 'Bellandur', 'Electronic City', 'HSR Layout',
@@ -30,6 +31,11 @@ export default function Matching() {
   const [selectedLead, setSelectedLead] = useState<string>('');
   const [searchArea, setSearchArea] = useState<string>('BTM Layout');
   const [areaSearch, setAreaSearch] = useState<string>('');
+
+  // Smart Add Lead state
+  const [rawText, setRawText] = useState('');
+  const [parsed, setParsed] = useState<ParsedLead | null>(null);
+  const createLead = useCreateLead();
 
   // Custom filters based on screenshot
   const [activeZone, setActiveZone] = useState('All Zones');
@@ -50,6 +56,37 @@ export default function Matching() {
 
   const totalPGs = PG_AREAS_FROM_EXCEL.reduce((s, a) => s + a.count, 0);
   const totalAreas = PG_AREAS_FROM_EXCEL.length;
+
+  const handleParse = (text: string) => {
+    setRawText(text);
+    if (!text.trim()) { setParsed(null); return; }
+    setParsed(parseLeadText(text));
+  };
+
+  const handleCreateParsedLead = async () => {
+    if (!parsed?.name || !parsed?.phone) {
+      toast.error('Lead must have at least a Name and Phone to be created.');
+      return;
+    }
+    try {
+      const newLead = await createLead.mutateAsync({
+        name: parsed.name.trim(),
+        phone: parsed.phone.trim(),
+        email: parsed.email?.trim() || null,
+        source: 'whatsapp',
+        budget: parsed.budget?.trim() || null,
+        preferred_location: parsed.preferred_location?.trim() || null,
+        notes: parsed.notes?.trim() || null,
+        status: 'new',
+      });
+      toast.success('Lead created from text!');
+      setRawText('');
+      setParsed(null);
+      setSelectedLead(newLead.id);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create lead');
+    }
+  };
 
   return (
     <AppLayout title="Property Matching" subtitle="">
@@ -152,10 +189,27 @@ export default function Matching() {
 
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5 block">WhatsApp / LinkedIn Parsing</label>
-                <Textarea
-                  placeholder="Paste lead text, WhatsApp message, or company name here..."
-                  className="resize-none h-24 bg-background border-border placeholder:text-muted-foreground/60"
-                />
+                <div className="space-y-2">
+                  <Textarea
+                    placeholder="Paste lead text, WhatsApp message, or company name here..."
+                    className="resize-none h-24 bg-background border-border placeholder:text-muted-foreground/60"
+                    value={rawText}
+                    onChange={e => handleParse(e.target.value)}
+                  />
+                  {parsed && parsed.name && parsed.phone && (
+                    <Button
+                      className="w-full h-10 bg-emerald-500 hover:bg-emerald-600 text-white font-bold"
+                      onClick={handleCreateParsedLead}
+                      disabled={createLead.isPending}
+                    >
+                      {createLead.isPending ? <Loader2 size={16} className="animate-spin mr-2" /> : <Sparkles size={16} className="mr-2" />}
+                      Add {parsed.name}
+                    </Button>
+                  )}
+                  {parsed && (!parsed.name || !parsed.phone) && rawText.trim() && (
+                    <p className="text-xs text-destructive text-center mt-1">Need name & phone in text to parse.</p>
+                  )}
+                </div>
               </div>
             </div>
 

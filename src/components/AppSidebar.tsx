@@ -10,33 +10,33 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const salesItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/leads',     icon: Users,           label: 'Leads' },
-  { to: '/pipeline',  icon: Kanban,          label: 'Pipeline' },
-  { to: '/visits',    icon: CalendarCheck,   label: 'Visits' },
+  { to: '/leads', icon: Users, label: 'Leads' },
+  { to: '/pipeline', icon: Kanban, label: 'Pipeline' },
+  { to: '/visits', icon: CalendarCheck, label: 'Visits' },
   { to: '/conversations', icon: MessageSquare, label: 'Messages' },
-  { to: '/bookings',  icon: Receipt,         label: 'Bookings' },
-  { to: '/analytics', icon: BarChart3,       label: 'Analytics', role: 'manager' },
-  { to: '/historical',icon: History,         label: 'Historical', role: 'manager' },
+  { to: '/bookings', icon: Receipt, label: 'Bookings' },
+  { to: '/analytics', icon: BarChart3, label: 'Analytics' },
+  { to: '/historical', icon: History, label: 'Historical' },
 ];
 
 const supplyItems = [
-  { to: '/owners',       icon: Building2, label: 'Owners',       role: 'manager' },
-  { to: '/inventory',    icon: Bed,       label: 'Inventory',    role: 'manager' },
-  { to: '/availability', icon: Map,       label: 'Availability', role: 'manager' },
-  { to: '/effort',       icon: TrendingUp,label: 'Effort',       role: 'manager' },
-  { to: '/matching',     icon: Sparkles,  label: 'Matching',     role: 'manager' },
-  { to: '/zones',        icon: Globe,     label: 'Zones',        role: 'admin' },
+  { to: '/owners', icon: Building2, label: 'Owners' },
+  { to: '/inventory', icon: Bed, label: 'Inventory' },
+  { to: '/availability', icon: Map, label: 'Availability' },
+  { to: '/effort', icon: TrendingUp, label: 'Effort' },
+  { to: '/matching', icon: Sparkles, label: 'Matching' },
+  { to: '/zones', icon: Globe, label: 'Zones' },
 ];
 
 const simulationItems = [
-  { to: '/iot',  icon: Radio, label: 'Smart Infrastructure' },
-  { to: '/math', icon: Cpu,   label: 'Optimization Engine' },
+  { to: '/iot', icon: Radio, label: 'Smart Infrastructure' },
+  { to: '/math', icon: Cpu, label: 'Smart Optimization' },
 ];
 
 // Consistent avatar colour based on first character
 const avatarColors: Record<string, string> = {
-  a:'#6366f1', b:'#8b5cf6', c:'#ec4899', d:'#f97316',
-  e:'#10b981', f:'#3b82f6', g:'#14b8a6', h:'#f59e0b',
+  a: '#6366f1', b: '#8b5cf6', c: '#ec4899', d: '#f97316',
+  e: '#10b981', f: '#3b82f6', g: '#14b8a6', h: '#f59e0b',
 };
 function getAvatarColor(char: string) {
   return avatarColors[char.toLowerCase()] ?? '#6366f1';
@@ -61,13 +61,7 @@ const AppSidebar = ({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => voi
   };
 
   const renderGroup = (label: string, items: any[]) => {
-    const visible = items.filter(item => {
-      if (!item.role) return true;
-      if (isAdmin) return true;
-      if (item.role === 'manager' && (isManager || isAdmin)) return true;
-      if (item.role === 'admin' && isAdmin) return true;
-      return false;
-    });
+    const visible = items;
     if (visible.length === 0) return null;
 
     return (
