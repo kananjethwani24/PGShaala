@@ -1342,3 +1342,28 @@ export const PG_AREAS_FROM_EXCEL: { name: string; count: number }[] = [
     "count": 1
   }
 ];
+
+export const AREA_COORDINATES: Record<string, { lat: number, lng: number }> = {
+  "Koramangala": { lat: 12.9340, lng: 77.6234 },
+  "Bellandur": { lat: 12.9304, lng: 77.6784 },
+  "Whitefield": { lat: 12.9698, lng: 77.7499 },
+  "Brookefield": { lat: 12.9652, lng: 77.7196 },
+  "Mahadevapura": { lat: 12.9880, lng: 77.6895 },
+  "BTM Layout": { lat: 12.9166, lng: 77.6101 },
+  "Yeshwanthpur": { lat: 13.0238, lng: 77.5529 },
+  "Marathahalli": { lat: 12.9569, lng: 77.7011 },
+  "Indiranagar": { lat: 12.9716, lng: 77.6411 },
+  "Electronic City": { lat: 12.8452, lng: 77.6602 },
+  "HSR Layout": { lat: 12.9121, lng: 77.6446 },
+  "Sarjapur Road": { lat: 12.9239, lng: 77.6741 },
+  "Nagawara": { lat: 13.0416, lng: 77.6186 },
+  "Hebbal": { lat: 13.0354, lng: 77.5988 },
+  "Manyata Tech Park": { lat: 13.0450, lng: 77.6206 },
+  "Kadubeesanahalli": { lat: 12.9377, lng: 77.6957 },
+  "Doddanekundi": { lat: 12.9723, lng: 77.6953 },
+  "JP Nagar": { lat: 12.9063, lng: 77.5857 },
+  "Bannerghatta": { lat: 12.9120, lng: 77.5996 },
+  "Domlur": { lat: 12.9610, lng: 77.6387 },
+  "Kundalahalli": { lat: 12.9678, lng: 77.7186 },
+  "AECS Layout": { lat: 12.9634, lng: 77.7121 }
+};

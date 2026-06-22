@@ -7,6 +7,7 @@ import {
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/components/ThemeProvider';
 
 const salesItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -46,14 +47,9 @@ const AppSidebar = ({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => voi
   const { user, role, isAdmin, isManager, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [isLight, setIsLight] = useState(() =>
-    document.documentElement.classList.contains('light')
-  );
+  const { theme, setTheme } = useTheme();
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('light', isLight);
-    if (isLight) document.documentElement.classList.remove('dark');
-  }, [isLight]);
+  const isLight = theme === 'light' || (theme === 'system' && !window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   const handleLogout = async () => {
     await signOut();
@@ -94,6 +90,8 @@ const AppSidebar = ({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => voi
 
   const emailChar = (user?.email?.[0] ?? 'U').toUpperCase();
   const avatarBg = getAvatarColor(emailChar);
+  // Use amber tones for user avatar to match brand
+  const userAvatarStyle = { background: `linear-gradient(135deg, #f59e0b, #d97706)`, color: '#1a1000', borderRadius: '8px' };
 
   return (
     <>
@@ -116,10 +114,10 @@ const AppSidebar = ({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => voi
       >
         {/* ── Logo ── */}
         <div className="sb-logo">
-          <div className="sb-logo-avatar">PG</div>
+          <div className="sb-logo-avatar">PS</div>
           <div className="sb-logo-text">
-            <span className="sb-logo-name">PG SHAALA</span>
-            <span className="sb-logo-sub">THE PG SUITE</span>
+            <span className="sb-logo-name">PGShaala</span>
+            <span className="sb-logo-sub">PROPERTY SUITE</span>
           </div>
           <button className="sb-close lg:hidden" onClick={onClose}>
             <X size={17} />
@@ -135,20 +133,20 @@ const AppSidebar = ({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => voi
 
         {/* ── Footer actions ── */}
         <div className="sb-footer">
-          <button onClick={() => setIsLight(!isLight)} className="sb-footer-btn">
+          <button onClick={() => setTheme(isLight ? 'dark' : 'light')} className="sb-footer-btn">
             {isLight ? <Moon size={15} strokeWidth={1.5} /> : <Sun size={15} strokeWidth={1.5} />}
             <span>{isLight ? 'Dark Mode' : 'Light Mode'}</span>
           </button>
 
           <button onClick={handleLogout} className="sb-footer-btn sb-footer-btn--danger">
             <LogOut size={15} strokeWidth={1.5} />
-            <span>Terminate Session</span>
+            <span>Sign Out</span>
           </button>
         </div>
 
         {/* ── User strip ── */}
         <div className="sb-user">
-          <div className="sb-user-avatar" style={{ background: avatarBg }}>
+          <div className="sb-user-avatar" style={userAvatarStyle}>
             {emailChar}
           </div>
           <div className="sb-user-info">

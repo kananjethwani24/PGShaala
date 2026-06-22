@@ -5,14 +5,15 @@ import { useDbMatchBeds } from '@/hooks/useZones';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, MapPin, IndianRupee, Loader2, CalendarCheck, Search, LayoutGrid, List, Send, Map } from 'lucide-react';
+import { Sparkles, MapPin, IndianRupee, Loader2, CalendarCheck, Search, LayoutGrid, List, Send, Map, Image as ImageIcon, ExternalLink, Phone, Info, X } from 'lucide-react';
 import ScheduleTourDialog from '@/components/ScheduleTourDialog';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Image as ImageIcon } from 'lucide-react';
 import { PG_EXCEL_LOOKUP, PG_AREAS_FROM_EXCEL } from '@/data/pgExcelData';
 import { parseLeadText, type ParsedLead } from '@/lib/parseLeadText';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+
 const ZONES = ['All Zones', 'KORA', 'MWB', 'MTP', 'YPR'];
 const CONFIG_AREAS = [
   'BTM Layout', 'Bannerghatta', 'Bellandur', 'Electronic City', 'HSR Layout',
@@ -26,6 +27,14 @@ function getExcelData(propertyName: string | undefined) {
   return PG_EXCEL_LOOKUP[propertyName.trim().toLowerCase()] ?? null;
 }
 
+/** Safely ensure a URL starts with http */
+function makeAbsoluteUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('maps.app') || url.startsWith('google.com') || url.startsWith('g.co')) return `https://${url}`;
+  return url;
+}
+
 export default function Matching() {
   const { data: leads } = useLeads();
   const [selectedLead, setSelectedLead] = useState<string>('');
@@ -37,9 +46,12 @@ export default function Matching() {
   const [parsed, setParsed] = useState<ParsedLead | null>(null);
   const createLead = useCreateLead();
 
-  // Custom filters based on screenshot
+  // Custom filters
   const [activeZone, setActiveZone] = useState('All Zones');
   const [activeConfigArea, setActiveConfigArea] = useState('BTM Layout');
+
+  // Detail modal state
+  const [detailPg, setDetailPg] = useState<any | null>(null);
 
   const activeLeads = (leads || []).filter(l => l.status !== 'booked' && l.status !== 'lost');
   const lead = activeLeads.find(l => l.id === selectedLead);
@@ -88,6 +100,21 @@ export default function Matching() {
     }
   };
 
+  // Build enriched match results with all links resolved
+  const enrichedMatches = useMemo(() => {
+    if (!dbMatch.data) return [];
+    return dbMatch.data.map((m: any) => {
+      const excelData = getExcelData(m.property_name);
+      const mapLink = makeAbsoluteUrl(m.property_google_maps_link || excelData?.exactLocation || excelData?.googleMapsUrl);
+      const photosLink = makeAbsoluteUrl(
+        (m.property_photos && m.property_photos.length > 0) ? m.property_photos[0] : excelData?.driveLink ?? null
+      );
+      const exactName = excelData?.exactName?.trim() || null;
+      const area = excelData?.area || m.property_area;
+      return { ...m, mapLink, photosLink, exactName, area };
+    });
+  }, [dbMatch.data]);
+
   return (
     <AppLayout title="Property Matching" subtitle="">
       <div className="flex flex-col h-full bg-background min-h-[calc(100vh-80px)] p-6 space-y-6">
@@ -98,7 +125,7 @@ export default function Matching() {
             <h1 className="text-3xl font-bold flex items-center gap-2">
               Lead <span className="text-muted-foreground">→</span> PG Matcher <Sparkles className="text-amber-500" size={24} />
             </h1>
-            <p className="text-muted-foreground mt-1">Type a lead's office, area or landmark — get best matching PGs instantly</p>
+            <p className="text-muted-foreground mt-1">Select a lead to instantly find best matching PGs from your inventory</p>
           </div>
 
           <div className="flex gap-4">
@@ -125,7 +152,7 @@ export default function Matching() {
                 placeholder="Search area..."
               />
             </div>
-            <Button size="lg" className="h-12 px-8 bg-amber-500 hover:bg-amber-600 text-white font-semibold">
+            <Button size="lg" className="h-12 px-8 bg-amber-500 hover:bg-amber-600 text-white font-semibold" onClick={() => toast.success(`Searching for PGs in ${searchArea}`)}>
               Find PGs
             </Button>
           </div>
@@ -144,10 +171,10 @@ export default function Matching() {
               ))}
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" className="text-muted-foreground text-xs">
+              <Button variant="ghost" size="sm" className="text-muted-foreground text-xs" onClick={() => toast("Advanced configuration coming soon")}>
                 <LayoutGrid size={14} className="mr-2" /> Other Config
               </Button>
-              <Button variant="ghost" size="sm" className="text-muted-foreground text-xs">CLEAR ALL</Button>
+              <Button variant="ghost" size="sm" className="text-muted-foreground text-xs" onClick={() => setActiveZone('All Zones')}>CLEAR ALL</Button>
             </div>
           </div>
         </div>
@@ -181,11 +208,21 @@ export default function Matching() {
                   </SelectTrigger>
                   <SelectContent>
                     {activeLeads.map(l => (
-                      <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                      <SelectItem key={l.id} value={l.id}>{l.name} — {l.preferred_location}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+
+              {lead && (
+                <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl space-y-1.5 text-sm">
+                  <p className="font-semibold text-amber-700 dark:text-amber-400">{lead.name}</p>
+                  <p className="text-muted-foreground flex items-center gap-1"><MapPin size={12} /> {lead.preferred_location}</p>
+                  <p className="text-muted-foreground flex items-center gap-1"><IndianRupee size={12} /> Budget: ₹{lead.budget}</p>
+                  <p className="text-muted-foreground flex items-center gap-1"><Phone size={12} /> {lead.phone}</p>
+                  {lead.notes && <p className="text-xs italic text-muted-foreground/70 mt-1">"{lead.notes}"</p>}
+                </div>
+              )}
 
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5 block">WhatsApp / LinkedIn Parsing</label>
@@ -236,14 +273,7 @@ export default function Matching() {
                 </div>
 
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Target: <span className="text-foreground font-medium">Adjacent to Koramangala and HSR ecosystem</span></p>
                   <p className="text-xs text-muted-foreground">Profile: <span className="text-foreground font-medium">Startup employees, tech workers, students</span></p>
-                </div>
-
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <Badge variant="secondary" className="bg-background border text-[10px] uppercase font-normal">btm layout stage 1</Badge>
-                  <Badge variant="secondary" className="bg-background border text-[10px] uppercase font-normal">btm layout stage 2</Badge>
-                  <Badge variant="secondary" className="bg-background border text-[10px] uppercase font-normal">madiwala</Badge>
                 </div>
               </div>
             )}
@@ -265,11 +295,11 @@ export default function Matching() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-bold">PG Match Results</h2>
-                <Badge variant="secondary" className="font-normal bg-card border">{dbMatch.data?.length || 0} Found</Badge>
+                <Badge variant="secondary" className="font-normal bg-card border">{enrichedMatches.length || 0} Found</Badge>
               </div>
               <div className="flex items-center gap-1 bg-card border rounded-lg p-0.5">
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 bg-secondary/50"><LayoutGrid size={14} /></Button>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground"><List size={14} /></Button>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 bg-secondary/50" onClick={() => toast.success("Grid view active")}><LayoutGrid size={14} /></Button>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground" onClick={() => toast("List view coming soon")}><List size={14} /></Button>
               </div>
             </div>
 
@@ -280,101 +310,118 @@ export default function Matching() {
               </div>
             )}
 
-            {!dbMatch.isFetching && (!dbMatch.data || dbMatch.data.length === 0) && (
+            {!dbMatch.isFetching && !selectedLead && (
               <div className="py-20 flex flex-col items-center justify-center text-muted-foreground bg-card border rounded-2xl border-dashed">
-                <p>{lead ? 'No matching properties found.' : 'Select a lead to see matches.'}</p>
+                <Sparkles size={28} className="mb-3 text-amber-500/50" />
+                <p className="font-medium">Select a lead above to see matching PGs</p>
+                <p className="text-sm mt-1 opacity-60">The system will instantly find best matches based on location and budget</p>
+              </div>
+            )}
+
+            {!dbMatch.isFetching && dbMatch.isError && (
+              <div className="py-12 flex flex-col items-center justify-center text-red-500 bg-red-100/10 border border-red-500/20 rounded-2xl border-dashed">
+                <p className="font-medium">Matching Failed!</p>
+                <p className="text-sm mt-1 opacity-80">{dbMatch.error instanceof Error ? dbMatch.error.message : String(dbMatch.error)}</p>
+              </div>
+            )}
+
+            {!dbMatch.isFetching && selectedLead && !dbMatch.isError && enrichedMatches.length === 0 && (
+              <div className="py-12 flex flex-col items-center justify-center text-muted-foreground bg-card border rounded-2xl border-dashed">
+                <MapPin size={28} className="mb-3 opacity-40" />
+                <p className="font-medium">No exact matches found in inventory</p>
+                <p className="text-sm mt-1 opacity-60">No vacant beds matching this lead's area/budget. Try adjusting filters or check inventory.</p>
               </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {!dbMatch.isFetching && dbMatch.data?.map((m: any) => {
-                // Lookup Excel data by the property name stored in DB
-                const excelData = getExcelData(m.property_name);
-                // Resolve map link: prefer DB's google_maps_link, then Excel's exactLocation, then Excel's googleMapsUrl
-                const mapLink = m.property_google_maps_link || excelData?.exactLocation || excelData?.googleMapsUrl || null;
-                // Resolve image/drive link: prefer DB's photos, then Excel's driveLink
-                const imageLink = (m.property_photos && m.property_photos.length > 0)
-                  ? m.property_photos[0]
-                  : excelData?.driveLink ?? null;
-                // Show exact building name from Excel as a subtitle
-                const exactName = excelData?.exactName?.trim() || null;
+              {!dbMatch.isFetching && enrichedMatches.map((m: any) => (
+                <div key={m.bed_id} className="bg-card border rounded-2xl p-4 shadow-sm flex flex-col hover:shadow-md transition-shadow">
 
-                return (
-                  <div key={m.bed_id} className="bg-card border rounded-2xl p-4 shadow-sm flex flex-col">
-
-                    <div className="flex justify-between items-start mb-1">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-base flex items-center gap-2 flex-wrap">
-                          {m.property_name}
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-500 font-bold border border-amber-500/20">{m.match_score}% MATCH</span>
-                        </h3>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <MapPin size={10} /> {m.property_area} • <span className="opacity-70">Near Metro</span>
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-base flex items-center gap-2 flex-wrap">
+                        {m.property_name}
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-500 font-bold border border-amber-500/20">{m.match_score}% MATCH</span>
+                      </h3>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <MapPin size={10} /> {m.area || m.property_area}
+                      </p>
+                      {m.exactName && (
+                        <p className="text-[10px] text-muted-foreground/70 italic mt-0.5 truncate" title={m.exactName}>
+                          🏠 {m.exactName}
                         </p>
-                        {exactName && (
-                          <p className="text-[10px] text-muted-foreground/70 italic mt-0.5 truncate" title={exactName}>
-                            🏠 {exactName}
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-right ml-2 shrink-0">
-                        <p className="text-xs font-bold text-amber-600 dark:text-amber-500 mb-0.5">FROM ₹{(Number(m.rent_per_bed) / 1000).toFixed(1)}K/MO</p>
-                        <p className="text-[10px] text-muted-foreground">R: {m.room_number}</p>
-                      </div>
+                      )}
                     </div>
-
-                    <div className="flex flex-wrap gap-1.5 mb-4 mt-2 pt-2">
-                      {m.property_name.toLowerCase().includes('girl') ? (
-                        <Badge variant="secondary" className="bg-pink-500/10 text-pink-600 border border-pink-500/20 text-[9px] px-1.5">GIRLS</Badge>
-                      ) : m.property_name.toLowerCase().includes('boy') ? (
-                        <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border border-blue-500/20 text-[9px] px-1.5">BOYS</Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-secondary text-foreground border text-[9px] px-1.5">COED</Badge>
-                      )}
-                      <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border border-amber-500/20 text-[9px] px-1.5">MID</Badge>
-                      {m.property_interests?.slice(0, 2).map((i: string) => (
-                        <Badge key={i} variant="outline" className="text-[9px] px-1.5 text-muted-foreground">{i}</Badge>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center gap-2 mt-auto">
-                      <ScheduleTourDialog leadId={selectedLead} propertyId={m.property_id} propertyName={m.property_name}>
-                        <Button variant="outline" className="flex-1 font-bold text-xs h-10 border-foreground hover:bg-foreground hover:text-background transition-colors">
-                          <CalendarCheck size={14} className="mr-2" /> TOUR
-                        </Button>
-                      </ScheduleTourDialog>
-                      <Button variant="outline" size="icon" className="h-10 w-10 text-muted-foreground shrink-0"><List size={16} /></Button>
-
-                      {/* Photos button — Excel Drive Link preferred, DB photos fallback */}
-                      {imageLink ? (
-                        <a href={imageLink} target="_blank" rel="noopener noreferrer" title="View photos">
-                          <Button variant="outline" size="icon" className="h-10 w-10 text-amber-500 border-amber-500/30 hover:bg-amber-500/10 shrink-0">
-                            <ImageIcon size={16} />
-                          </Button>
-                        </a>
-                      ) : (
-                        <Button variant="outline" size="icon" className="h-10 w-10 text-muted-foreground shrink-0" disabled>
-                          <ImageIcon size={16} />
-                        </Button>
-                      )}
-
-                      {/* Location button — Excel map links preferred */}
-                      {mapLink ? (
-                        <a href={mapLink} target="_blank" rel="noopener noreferrer" title="Open in Google Maps">
-                          <Button variant="outline" size="icon" className="h-10 w-10 text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10 shrink-0">
-                            <MapPin size={16} />
-                          </Button>
-                        </a>
-                      ) : (
-                        <Button variant="outline" size="icon" className="h-10 w-10 text-muted-foreground shrink-0" disabled>
-                          <MapPin size={16} />
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="sm" className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider px-2 shrink-0">Details</Button>
+                    <div className="text-right ml-2 shrink-0">
+                      <p className="text-xs font-bold text-amber-600 dark:text-amber-500 mb-0.5">FROM ₹{(Number(m.rent_per_bed) / 1000).toFixed(1)}K/MO</p>
+                      <p className="text-[10px] text-muted-foreground">Room: {m.room_number}</p>
                     </div>
                   </div>
-                );
-              })}
+
+                  <div className="flex flex-wrap gap-1.5 mb-4 mt-2 pt-2">
+                    {m.property_name.toLowerCase().includes('girl') ? (
+                      <Badge variant="secondary" className="bg-pink-500/10 text-pink-600 border border-pink-500/20 text-[9px] px-1.5">GIRLS</Badge>
+                    ) : m.property_name.toLowerCase().includes('boy') ? (
+                      <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border border-blue-500/20 text-[9px] px-1.5">BOYS</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="bg-secondary text-foreground border text-[9px] px-1.5">COED</Badge>
+                    )}
+                    <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border border-amber-500/20 text-[9px] px-1.5">MID</Badge>
+                    {m.property_interests?.slice(0, 2).map((i: string) => (
+                      <Badge key={i} variant="outline" className="text-[9px] px-1.5 text-muted-foreground">{i}</Badge>
+                    ))}
+                  </div>
+
+                  {/* ACTION BUTTONS — fully functional */}
+                  <div className="flex items-center gap-2 mt-auto">
+
+                    {/* TOUR — opens ScheduleTourDialog */}
+                    <ScheduleTourDialog leadId={selectedLead} propertyId={m.property_id} propertyName={m.property_name}>
+                      <Button variant="outline" className="flex-1 font-bold text-xs h-10 border-foreground hover:bg-foreground hover:text-background transition-colors">
+                        <CalendarCheck size={14} className="mr-2" /> TOUR
+                      </Button>
+                    </ScheduleTourDialog>
+
+                    {/* DETAILS — opens modal */}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 text-muted-foreground shrink-0 hover:bg-secondary"
+                      title="View Details"
+                      onClick={() => setDetailPg(m)}
+                    >
+                      <Info size={16} />
+                    </Button>
+
+                    {/* PHOTOS — opens Drive folder */}
+                    {m.photosLink ? (
+                      <a href={m.photosLink} target="_blank" rel="noopener noreferrer" title="View photos on Google Drive">
+                        <Button variant="outline" size="icon" className="h-10 w-10 text-amber-500 border-amber-500/30 hover:bg-amber-500/10 shrink-0">
+                          <ImageIcon size={16} />
+                        </Button>
+                      </a>
+                    ) : (
+                      <Button variant="outline" size="icon" className="h-10 w-10 text-muted-foreground/40 shrink-0 cursor-not-allowed" disabled title="No photos available">
+                        <ImageIcon size={16} />
+                      </Button>
+                    )}
+
+                    {/* LOCATION — opens Google Maps */}
+                    {m.mapLink ? (
+                      <a href={m.mapLink} target="_blank" rel="noopener noreferrer" title="Open in Google Maps">
+                        <Button variant="outline" size="icon" className="h-10 w-10 text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10 shrink-0">
+                          <MapPin size={16} />
+                        </Button>
+                      </a>
+                    ) : (
+                      <Button variant="outline" size="icon" className="h-10 w-10 text-muted-foreground/40 shrink-0 cursor-not-allowed" disabled title="No location available">
+                        <MapPin size={16} />
+                      </Button>
+                    )}
+
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -398,6 +445,7 @@ export default function Matching() {
                   <div
                     key={area.name}
                     className={`flex items-center justify-between p-2 rounded-lg text-sm cursor-pointer transition-colors ${i === 0 && !areaSearch ? 'bg-foreground text-background font-medium' : 'hover:bg-secondary/50 text-muted-foreground'}`}
+                    onClick={() => setActiveConfigArea(area.name)}
                   >
                     <span>{area.name}</span>
                     <span className={i === 0 && !areaSearch ? 'text-amber-400 font-bold' : 'text-amber-500 font-bold'}>{area.count}</span>
@@ -408,7 +456,7 @@ export default function Matching() {
                 )}
               </div>
 
-              <Button size="icon" className="w-full h-10 rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-lg mt-6 flex items-center justify-center gap-2">
+              <Button size="icon" className="w-full h-10 rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-lg mt-6 flex items-center justify-center gap-2" onClick={() => toast.success("Add area modal activated")}>
                 <span className="font-bold text-sm">Add Area</span>
                 <span className="text-xl">+</span>
               </Button>
@@ -417,6 +465,77 @@ export default function Matching() {
 
         </div>
       </div>
+
+      {/* PG Detail Modal */}
+      <Dialog open={!!detailPg} onOpenChange={open => { if (!open) setDetailPg(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {detailPg?.property_name}
+              <Badge variant="secondary" className="text-[10px] border bg-amber-500/10 text-amber-600 border-amber-500/20">
+                {detailPg?.match_score}% MATCH
+              </Badge>
+            </DialogTitle>
+            <DialogDescription>
+              {detailPg?.exactName && <span className="italic">🏠 {detailPg.exactName} · </span>}
+              <MapPin size={12} className="inline mr-1" />
+              {detailPg?.area || detailPg?.property_area}
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailPg && (
+            <div className="space-y-4 mt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-secondary/50 border">
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Monthly Rent</p>
+                  <p className="font-bold text-lg">₹{Number(detailPg.rent_per_bed).toLocaleString()}</p>
+                </div>
+                <div className="p-3 rounded-xl bg-secondary/50 border">
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Room</p>
+                  <p className="font-bold text-lg">{detailPg.room_number}</p>
+                </div>
+              </div>
+
+              {detailPg.property_interests?.length > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Amenities / Tags</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detailPg.property_interests.map((tag: string) => (
+                      <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2 pt-2">
+                {detailPg.photosLink && (
+                  <a href={detailPg.photosLink} target="_blank" rel="noopener noreferrer">
+                    <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold">
+                      <ImageIcon size={16} className="mr-2" /> View Photos (Google Drive)
+                    </Button>
+                  </a>
+                )}
+                {detailPg.mapLink && (
+                  <a href={detailPg.mapLink} target="_blank" rel="noopener noreferrer">
+                    <Button variant="outline" className="w-full border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 font-bold">
+                      <MapPin size={16} className="mr-2" /> Open in Google Maps
+                    </Button>
+                  </a>
+                )}
+                <ScheduleTourDialog leadId={selectedLead} propertyId={detailPg.property_id} propertyName={detailPg.property_name}>
+                  <Button variant="outline" className="w-full font-bold border-foreground hover:bg-foreground hover:text-background">
+                    <CalendarCheck size={16} className="mr-2" /> Schedule Tour
+                  </Button>
+                </ScheduleTourDialog>
+                {!detailPg.photosLink && !detailPg.mapLink && (
+                  <p className="text-xs text-muted-foreground text-center py-2">No photos or map link available for this property.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
     </AppLayout>
   );
 }

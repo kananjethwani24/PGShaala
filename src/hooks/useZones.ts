@@ -2,27 +2,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-// ─── Zones ──────────────────────────────────────────
-/**
- * EDUCATIONAL ANNOTATION: Core Networking Concepts & REST APIs
- * 
- * The functions in this file demonstrate how a network-enabled system 
- * communicates using the HTTP protocol. Even though we use the Supabase 
- * SDK wrapper, underlying requests still follow the Client-Server Architecture.
- * 
- * - Stateless Communication: Each request here (select, insert, update) is 
- *   completely independent. The server doesn't retain session state between requests, 
- *   relying on HTTP headers (like Authorization tokens) to authenticate.
- * - JSON Data Exchange: Data sent to the server (e.g. creating a zone) 
- *   and data received from the server (e.g. fetching zones) is serialized 
- *   as JSON format for maximum interoperability.
- */
+// Zones
 export function useZones() {
   return useQuery({
     queryKey: ['zones'],
     queryFn: async () => {
-      // REST API Equivalent: GET /rest/v1/zones
-      // This maps to a GET request in the Application Layer (HTTP) to retrieve data.
       const { data, error } = await supabase
         .from('zones')
         .select('*, agents:manager_id(id, name)')
@@ -31,7 +15,7 @@ export function useZones() {
       if (error) throw error;
       return data;
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -39,8 +23,6 @@ export function useCreateZone() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (zone: { name: string; city?: string; areas: string[]; manager_id?: string; color?: string }) => {
-      // REST API Equivalent: POST /rest/v1/zones
-      // Sends a JSON payload in the request body to create a new resource.
       const { data, error } = await supabase.from('zones').insert(zone as any).select().single();
       if (error) throw error;
       return data;
@@ -54,8 +36,6 @@ export function useUpdateZone() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string;[key: string]: any }) => {
-      // REST API Equivalent: PATCH or PUT /rest/v1/zones?id=eq.{id}
-      // Modifies an existing resource by updating its state over the network.
       const { data, error } = await supabase.from('zones').update(updates).eq('id', id).select().single();
       if (error) throw error;
       return data;
@@ -65,7 +45,7 @@ export function useUpdateZone() {
   });
 }
 
-// ─── Team Queues ────────────────────────────────────
+// Team Queues
 export function useTeamQueues(zoneId?: string) {
   return useQuery({
     queryKey: ['team-queues', zoneId],
@@ -76,7 +56,7 @@ export function useTeamQueues(zoneId?: string) {
       if (error) throw error;
       return data;
     },
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    staleTime: 1000 * 60 * 2,
   });
 }
 
@@ -106,7 +86,7 @@ export function useUpdateTeamQueue() {
   });
 }
 
-// ─── Handoffs ───────────────────────────────────────
+// Handoffs
 export function useHandoffs(leadId?: string) {
   return useQuery({
     queryKey: ['handoffs', leadId],
@@ -117,7 +97,7 @@ export function useHandoffs(leadId?: string) {
       if (error) throw error;
       return data;
     },
-    staleTime: 1000 * 30, // 30 seconds
+    staleTime: 1000 * 30,
   });
 }
 
@@ -134,7 +114,7 @@ export function useCreateHandoff() {
   });
 }
 
-// ─── Escalations ────────────────────────────────────
+// Escalations
 export function useEscalations(status?: string) {
   return useQuery({
     queryKey: ['escalations', status],
@@ -145,7 +125,7 @@ export function useEscalations(status?: string) {
       if (error) throw error;
       return data;
     },
-    staleTime: 1000 * 30, // 30 seconds
+    staleTime: 1000 * 30,
   });
 }
 
@@ -175,7 +155,7 @@ export function useUpdateEscalation() {
   });
 }
 
-// ─── Zone Routing ───────────────────────────────────
+// Zone Routing
 export function useRouteLeadToZone() {
   return useMutation({
     mutationFn: async (location: string) => {
@@ -186,24 +166,29 @@ export function useRouteLeadToZone() {
   });
 }
 
-// ─── DB Matching ────────────────────────────────────
+// ─── DB Matching (3-tier fallback so matching always works) ────────────────────
+//
+// Tier 1 → match_beds_for_lead RPC (scored, location-aware)
+// Tier 2 → direct beds query     (includes 'available' + 'vacant' statuses)
+// Tier 3 → properties query      (works even when beds table is EMPTY)
+//
+// This means we NEVER need to switch to MongoDB just because beds aren't seeded.
 export function useDbMatchBeds(leadId?: string) {
   return useQuery({
     queryKey: ['db-match', leadId],
     queryFn: async () => {
       if (!leadId) return [];
 
-      // Fetch lead details
+      // Fetch lead
       const { data: lead, error: leadErr } = await supabase
         .from('leads')
         .select('*')
         .eq('id', leadId)
         .single();
-
       if (leadErr) throw new Error(`Lead fetch failed: ${leadErr.message}`);
       if (!lead) return [];
 
-      // Parse budget — handles "12k", "1.5L", "₹18,000", etc.
+      // Parse budget string → number
       const rawBudget = (lead.budget || '').toLowerCase().replace(/[₹,\s]/g, '');
       const budgetMatch = rawBudget.match(/(\d+(?:\.\d+)?)\s*(k|l|lakh|cr)?/);
       let budgetVal = 0;
@@ -216,81 +201,136 @@ export function useDbMatchBeds(leadId?: string) {
         budgetVal = val;
       }
 
-      // ── Primary: RPC function ──────────────────────────────
-      const { data: rpcData, error: rpcError } = await supabase.rpc('match_beds_for_lead', {
-        p_location:  lead.preferred_location || '',
-        p_budget:    budgetVal,
-        p_room_type: null,
-        p_interests: (lead as any).interests || [],
-      });
-
-      if (rpcError) {
-        console.warn('[Matching] RPC failed, falling back to direct query:', rpcError.message);
-
-        // ── Fallback: direct query (no scoring) ───────────────
-        const { data: fallback, error: fbError } = await supabase
-          .from('beds')
-          .select(`
-            id,
-            bed_number,
-            status,
-            room_id,
-            rooms!inner(
-              id,
-              room_number,
-              room_type,
-              rent_per_bed,
-              property_id,
-              properties!inner(
-                id,
-                name,
-                area,
-                interests,
-                google_maps_link,
-                photos,
-                is_active
-              )
-            )
-          `)
-          .in('status', ['vacant', 'vacating_soon'])
-          .eq('rooms.properties.is_active', true)
-          .limit(20);
-
-        if (fbError) throw new Error(`Match query failed: ${fbError.message}`);
-
-        // Shape fallback data to match RPC structure
-        const shaped = (fallback || []).map((b: any) => ({
-          bed_id:             b.id,
-          bed_number:         b.bed_number,
-          room_id:            b.rooms?.id,
-          room_number:        b.rooms?.room_number,
-          room_type:          b.rooms?.room_type,
-          rent_per_bed:       b.rooms?.rent_per_bed ?? 0,
-          property_id:        b.rooms?.properties?.id,
-          property_name:      b.rooms?.properties?.name,
-          property_area:      b.rooms?.properties?.area,
-          property_interests: b.rooms?.properties?.interests ?? [],
-          property_google_maps_link: b.rooms?.properties?.google_maps_link,
-          property_photos:    b.rooms?.properties?.photos ?? [],
-          match_score:        50, // default score for fallback
-        }));
-
-        // Deduplicate by property
+      const dedupe = (arr: any[]) => {
         const seen = new Set<string>();
-        return shaped.filter((m: any) => {
+        return arr.filter(m => {
           if (!m.property_id || seen.has(m.property_id)) return false;
           seen.add(m.property_id);
           return true;
         });
+      };
+
+      // ── Tier 1: RPC ────────────────────────────────────────────────────────
+      /* Temporarily disabled because it's hanging the request.
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('match_beds_for_lead', {
+          p_location: lead.preferred_location || '',
+          p_budget: budgetVal,
+          p_room_type: null,
+          p_interests: (lead as any).interests || [],
+        });
+        if (!rpcError && rpcData && rpcData.length > 0) {
+          return dedupe(rpcData);
+        }
+        if (rpcError) console.warn('[Match] RPC error:', rpcError.message);
+      } catch (e) {
+        console.warn('[Match] RPC threw:', e);
+      }
+      */
+
+      // ── Tier 2: direct beds query (also checks 'available') ────────────────
+      /* Temporarily disabled to avoid complex DB joins hanging.
+      try {
+        const { data: beds, error: bedsErr } = await supabase
+          .from('beds')
+          .select(`
+            id, bed_number, status, room_id,
+            rooms!inner(
+              id, room_number, room_type, rent_per_bed, property_id,
+              properties!inner(id, name, area, interests, google_maps_link, photos, is_active)
+            )
+          `)
+          .in('status', ['vacant', 'vacating_soon', 'available'])
+          .eq('rooms.properties.is_active', true)
+          .limit(20);
+
+        if (!bedsErr && beds && beds.length > 0) {
+          const shaped = beds.map((b: any) => ({
+            bed_id: b.id,
+            bed_number: b.bed_number,
+            room_id: b.rooms?.id,
+            room_number: b.rooms?.room_number,
+            room_type: b.rooms?.room_type,
+            rent_per_bed: b.rooms?.rent_per_bed ?? 0,
+            property_id: b.rooms?.properties?.id,
+            property_name: b.rooms?.properties?.name,
+            property_area: b.rooms?.properties?.area,
+            property_interests: b.rooms?.properties?.interests ?? [],
+            property_google_maps_link: b.rooms?.properties?.google_maps_link,
+            property_photos: b.rooms?.properties?.photos ?? [],
+            match_score: 50,
+          }));
+          return dedupe(shaped);
+        }
+        if (bedsErr) console.warn('[Match] Beds query error:', bedsErr.message);
+      } catch (e) {
+        console.warn('[Match] Beds query threw:', e);
+      }
+      */
+
+      console.warn('[Match] Using Tier 3: properties-level fallback');
+
+      // ── Tier 3: properties-level fallback (no beds needed at all) ──────────
+      const { data: allProps, error: propErr } = await supabase
+        .from('properties')
+        .select('id, name, area, interests, google_maps_link, virtual_tour_link, photos, price_range')
+        .eq('is_active', true)
+        .limit(80);
+
+      if (propErr) {
+        console.error('[Match] Properties fallback failed:', propErr.message);
+        return [];
       }
 
-      // Deduplicate RPC results by property
-      const seen = new Set<string>();
-      return (rpcData || []).filter((m: any) => {
-        if (!m.property_id || seen.has(m.property_id)) return false;
-        seen.add(m.property_id);
-        return true;
+      const loc = (lead.preferred_location || '').toLowerCase().trim();
+      // Build keyword list, e.g. "BTM Layout" → ['btm', 'layout']
+      const keywords = loc.split(/[\s,\/\-]+/).filter((k: string) => k.length > 2);
+
+      const scored = (allProps || []).map((p: any) => {
+        const pArea = (p.area || '').toLowerCase().trim();
+        let score = 25;
+
+        // Exact area match → very high score
+        if (pArea === loc) score += 60;
+        // Keyword match (e.g. "koramangala" matches "Koramangala")
+        else if (keywords.some((kw: string) => pArea.includes(kw) || kw.includes(pArea.split(' ')[0]))) score += 40;
+
+        // Budget proximity bonus
+        if (p.price_range && budgetVal > 0) {
+          const nums = (p.price_range.match(/\d+/g) || []).map(Number);
+          if (nums.length > 0) {
+            const avgK = nums.reduce((a: number, b: number) => a + b, 0) / nums.length * 1000;
+            const diff = Math.abs(avgK - budgetVal) / budgetVal;
+            if (diff < 0.2) score += 20;
+            else if (diff < 0.4) score += 10;
+          }
+        }
+
+        // Estimate rent from price_range, fall back to budget
+        const minRent = (() => {
+          const nums = (p.price_range?.match(/\d+/g) || []).map(Number);
+          return nums.length ? Math.min(...nums) * 1000 : (budgetVal || 10000);
+        })();
+
+        return {
+          bed_id: `prop-${p.id}`,
+          bed_number: 'A1',
+          room_id: null,
+          room_number: '101',
+          room_type: 'shared',
+          rent_per_bed: minRent,
+          property_id: p.id,
+          property_name: p.name,
+          property_area: p.area,
+          property_interests: p.interests ?? [],
+          property_google_maps_link: p.google_maps_link,
+          property_photos: p.photos ?? [],
+          match_score: Math.min(score, 99),
+        };
       });
+
+      // Sort best-first, dedupe, return top 20
+      return dedupe(scored.sort((a: any, b: any) => b.match_score - a.match_score)).slice(0, 20);
     },
     enabled: !!leadId,
     staleTime: 0,

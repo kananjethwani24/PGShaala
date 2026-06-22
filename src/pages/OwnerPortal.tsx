@@ -4,12 +4,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
@@ -157,7 +158,7 @@ export default function OwnerPortal() {
   const [confirmDialog, setConfirmDialog] = useState<any>(null);
   const [confirmStatus, setConfirmStatus] = useState('vacant');
   const [confirmNotes, setConfirmNotes] = useState('');
-  
+
   const [editDialog, setEditDialog] = useState<any>(null);
   const [editForm, setEditForm] = useState({ expected_rent: '', status: '', auto_locked: false });
 
@@ -237,21 +238,21 @@ export default function OwnerPortal() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen japanese-pattern-bg text-foreground">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
+      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center shadow-sm">
-                <span className="text-white font-bold text-xs">PG</span>
+          <div className="flex items-center justify-between h-20">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
+              <div className="w-10 h-10 rounded flex items-center justify-center font-display font-bold text-white bg-primary shadow-[2px_2px_0px_rgba(195,34,48,0.2)]">
+                PS
               </div>
-              <div>
-                <span className="font-semibold text-base tracking-tight text-foreground">PG SHAALA</span>
-                <span className="text-xs text-muted-foreground ml-2">Owner Portal</span>
-              </div>
+              <span className="font-display font-medium text-lg tracking-widest text-foreground uppercase">
+                Owner Portal
+              </span>
             </div>
             <div className="flex items-center gap-3">
+              <ThemeToggle />
               <span className="text-sm text-muted-foreground hidden sm:block">Welcome, {owner.name}</span>
               <Button variant="outline" size="sm" onClick={() => signOut()}>
                 <LogOut size={14} className="mr-1" /> Sign Out
@@ -261,12 +262,12 @@ export default function OwnerPortal() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Title + Property Selector */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 mb-10">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Property Dashboard</h1>
-            <p className="text-sm text-muted-foreground">{owner.name}{owner.company_name ? ` · ${owner.company_name}` : ''}</p>
+            <h1 className="font-display text-3xl font-medium tracking-wide text-foreground mb-1">Estate Dashboard</h1>
+            <p className="text-sm text-foreground/60 font-body">{owner.name}{owner.company_name ? ` · ${owner.company_name}` : ''}</p>
           </div>
           <Select value={selectedProperty} onValueChange={setSelectedProperty}>
             <SelectTrigger className="w-64">
@@ -285,19 +286,19 @@ export default function OwnerPortal() {
         {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           {[
-            { label: 'Total Properties', value: filteredProps.length, icon: Building2, color: 'text-accent' },
+            { label: 'Total Estates', value: filteredProps.length, icon: Building2, color: 'text-primary' },
             { label: 'Total Beds', value: totalBeds, icon: Bed, color: 'text-info' },
             { label: 'Vacant Beds', value: vacantBeds, icon: CheckCircle2, color: 'text-success' },
             { label: 'Occupancy Rate', value: `${occupancyRate}%`, icon: TrendingUp, color: 'text-warning' },
           ].map((kpi) => (
             <motion.div key={kpi.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
               <Card>
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-2 mb-2">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-2 mb-3">
                     <kpi.icon size={16} className={kpi.color} />
-                    <span className="text-xs text-muted-foreground">{kpi.label}</span>
+                    <span className="text-xs text-foreground/50 tracking-wider uppercase">{kpi.label}</span>
                   </div>
-                  <p className="text-2xl font-semibold">{kpi.value}</p>
+                  <p className="font-display text-3xl font-medium">{kpi.value}</p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -346,7 +347,7 @@ export default function OwnerPortal() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            {room.auto_locked && <Lock size={12} className="text-destructive" title="Locked" />}
+                            {room.auto_locked && <div title="Locked"><Lock size={12} className="text-destructive" /></div>}
                             <Badge className={`text-2xs border ${STATUS_COLORS[room.status] || 'bg-muted'}`}>
                               {room.status}
                             </Badge>
@@ -362,10 +363,10 @@ export default function OwnerPortal() {
                                 className="h-7 px-2 text-xs"
                                 onClick={() => {
                                   setEditDialog(room);
-                                  setEditForm({ 
-                                    expected_rent: room.expected_rent?.toString() || '', 
-                                    status: room.status, 
-                                    auto_locked: room.auto_locked 
+                                  setEditForm({
+                                    expected_rent: room.expected_rent?.toString() || '',
+                                    status: room.status,
+                                    auto_locked: room.auto_locked
                                   });
                                 }}
                               >
@@ -567,9 +568,9 @@ export default function OwnerPortal() {
               </Select>
             </div>
             <div className="flex items-center gap-2 pt-2">
-              <input 
-                type="checkbox" 
-                id="lock-room" 
+              <input
+                type="checkbox"
+                id="lock-room"
                 checked={editForm.auto_locked}
                 onChange={(e) => setEditForm({ ...editForm, auto_locked: e.target.checked })}
                 className="rounded border-border text-primary focus:ring-primary h-4 w-4"

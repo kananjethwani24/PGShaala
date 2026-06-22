@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePublicProperties, useAvailableCities, useAvailableAreas, useLandmarks, type PropertyFilters } from '@/hooks/usePublicData';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AREA_COORDINATES } from '@/data/pgExcelData';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const PropertyMap = lazy(() => import('@/components/PropertyMap'));
 
@@ -57,20 +59,40 @@ export default function Explore() {
     return 'bg-success/10 text-success';
   };
 
-  const mapProperties = useMemo(() =>
-    (properties || []).map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      area: p.area,
-      latitude: p.latitude,
-      longitude: p.longitude,
-      photos: p.photos,
-      rating: p.rating,
-      vacantBeds: getAvailableBeds(p),
-      rentRange: getRentRange(p),
-    })),
-    [properties]
-  );
+  const mapProperties = useMemo(() => {
+    return (properties || []).map((p: any, index: number) => {
+      let lat = p.latitude;
+      let lng = p.longitude;
+
+      if (!lat || !lng) {
+        // Fallback to area mapping
+        const areaCoord = AREA_COORDINATES[p.area] || AREA_COORDINATES["Koramangala"];
+        if (areaCoord) {
+          // Add a larger random jitter (approx 2-3km) so properties in same area don't perfectly overlap
+          // Seed the math random pseudo-deterministically using ID length or index so they don't jump every render wildly
+          const stableRandom = ((p.id?.charCodeAt(0) || 0) + (p.id?.charCodeAt(p.id?.length - 1) || 0) + index) % 100 / 100;
+          const stableRandom2 = ((p.name?.charCodeAt(0) || 0) + (p.name?.charCodeAt(p.name?.length - 1) || 0) + index) % 100 / 100;
+
+          const jitterLat = (stableRandom - 0.5) * 0.04;
+          const jitterLng = (stableRandom2 - 0.5) * 0.04;
+          lat = areaCoord.lat + jitterLat;
+          lng = areaCoord.lng + jitterLng;
+        }
+      }
+
+      return {
+        id: p.id,
+        name: p.name,
+        area: p.area,
+        latitude: lat,
+        longitude: lng,
+        photos: p.photos,
+        rating: p.rating,
+        vacantBeds: getAvailableBeds(p),
+        rentRange: getRentRange(p),
+      };
+    });
+  }, [properties]);
 
   // Tech park discovery
   const techParks = landmarks?.filter(l => l.type === 'tech_park') || [];
@@ -132,22 +154,27 @@ export default function Explore() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen japanese-pattern-bg text-foreground">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
+      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between h-14">
-            <button onClick={() => navigate('/')} className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center shadow-sm">
-                <span className="text-white font-bold text-[10px]">PG</span>
+          <div className="flex items-center justify-between h-16">
+            <button onClick={() => navigate('/')} className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded shrink-0 flex items-center justify-center font-display font-bold text-white bg-primary shadow-[2px_2px_0px_rgba(195,34,48,0.2)]">
+                PS
               </div>
-              <span className="font-semibold text-base tracking-tight text-foreground">PG SHAALA</span>
+              <span className="font-display font-medium text-lg tracking-widest text-foreground uppercase hidden sm:block">
+                PGShaala
+              </span>
             </button>
-            <div className="hidden md:flex items-center gap-5 text-sm text-muted-foreground">
-              <button className="text-foreground font-medium">Explore PGs</button>
-              <button onClick={() => navigate('/owner-portal')} className="hover:text-foreground transition-colors">For Owners</button>
+            <div className="hidden md:flex items-center gap-5 text-sm text-foreground/70 font-medium">
+              <button className="text-primary transition-colors">Explore</button>
+              <button onClick={() => navigate('/owner-portal')} className="hover:text-primary transition-colors">Owners</button>
             </div>
-            <Button variant="outline" size="sm" onClick={() => navigate('/auth')}>Login</Button>
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <Button variant="outline" size="sm" onClick={() => navigate('/auth')}>Login</Button>
+            </div>
           </div>
         </div>
       </header>

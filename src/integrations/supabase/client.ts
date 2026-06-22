@@ -1,4 +1,6 @@
-import { mockSupabase } from './mockDb';
+import { createClient } from '@supabase/supabase-js';
 
-// Replaced unreachable Supabase client with high-fidelity client-side Mock Database
-export const supabase = mockSupabase;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
