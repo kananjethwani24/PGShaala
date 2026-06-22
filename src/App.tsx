@@ -37,9 +37,10 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 30, // 30 seconds
-      gcTime: 1000 * 60 * 5, // 5 minutes
+      staleTime: 1000 * 60 * 2, // 2 minutes – prevents redundant refetches on navigation
+      gcTime: 1000 * 60 * 20,   // keep cache for 20 minutes
       refetchOnWindowFocus: false,
+      refetchOnMount: false,     // use cache if available when mounting
       retry: 1,
     },
   },

@@ -30,7 +30,7 @@ export const useLeads = () =>
         .select('*, agents(id, name), properties(id, name)')
         .order('created_at', { ascending: false })
         .limit(200);
-        
+
       if (error) {
         console.error(error);
         throw error;
@@ -38,7 +38,7 @@ export const useLeads = () =>
 
       return data as LeadWithRelations[];
     },
-    staleTime: 5000,
+    staleTime: 1000 * 60 * 2, // 2 minutes — reduces cold-start re-fetching
   });
 
 // Leads (paginated — used by Leads list page)
